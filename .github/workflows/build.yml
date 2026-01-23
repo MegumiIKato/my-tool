@@ -1,0 +1,29 @@
+name: 打包 Windows 程序
+
+on: [push] # 每次你上传代码时都会自动触发
+
+jobs:
+  build:
+    runs-on: windows-latest  # 使用真实的 Windows 服务器运行
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v3
+
+      - name: 设置 Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: 安装依赖
+        run: |
+          pip install pyinstaller
+
+      - name: 执行打包
+        run: |
+          pyinstaller -F json_cropland_number.py
+
+      - name: 上传结果
+        uses: actions/upload-artifact@v3
+        with:
+          name: Cropland-Count-Tool # 下载时的文件名
+          path: dist/json_cropland_number.exe
