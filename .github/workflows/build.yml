@@ -1,16 +1,16 @@
 name: 打包 Windows 程序
 
-on: [push] # 每次你上传代码时都会自动触发
+on: [push, workflow_dispatch] # push时触发，也支持手动触发
 
 jobs:
   build:
-    runs-on: windows-latest  # 使用真实的 Windows 服务器运行
+    runs-on: windows-latest  # 使用最新的 Windows 服务器
     steps:
       - name: 检出代码
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4 # 升级到 v4
 
       - name: 设置 Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5 # 升级到 v5
         with:
           python-version: '3.10'
 
@@ -20,10 +20,10 @@ jobs:
 
       - name: 执行打包
         run: |
-          pyinstaller -F json_cropland_number.py
+          pyinstaller --noconfirm --onefile --console json_cropland_number.py
 
       - name: 上传结果
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4 # 升级到 v4 (关键修改)
         with:
-          name: Cropland-Count-Tool # 下载时的文件名
+          name: Cropland-Count-Tool-Windows
           path: dist/json_cropland_number.exe
