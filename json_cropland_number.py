@@ -111,6 +111,7 @@ def main():
             error_count += 1
             
             # 计算相对路径，保持子文件夹结构 (A/A1/xxx.json -> ERROR_CHECK_RESULTS/A1/xxx.json)
+            
             rel_path = json_path.relative_to(src_dir)
             target_json_path = dst_dir / rel_path
             target_json_path.parent.mkdir(parents=True, exist_ok=True)
