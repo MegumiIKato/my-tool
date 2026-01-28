@@ -1,0 +1,33 @@
+name: Build Windows EXE
+
+on:
+  workflow_dispatch: # 允许手动点击按钮触发打包
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+
+    - name: Build EXE with PyInstaller
+      run: |
+        # 注意：请将下方的文件名替换为你实际的完整文件名
+        pyinstaller --noconfirm --onefile --console --name "OverlapCheckTool" check_overlaps_spatial.py 
+
+    - name: Upload Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: OverlapCheck_Executable
+        path: dist/OverlapCheckTool.exe
