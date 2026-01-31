@@ -1,38 +1,26 @@
 name: LabelCheck
 
-# 手动触发构建
 on:
-  workflow_dispatch:
-
+  workflow_dispatch: # 手动触发
 jobs:
   build:
-    # 使用最新稳定版 runner
-    runs-on: ubuntu-latest
-
+    runs-on: windows-latest  # 使用 Windows 环境打包 exe
     steps:
-      # 1. 检出代码 (使用 v4)
       - name: Checkout Code
         uses: actions/checkout@v4
-
-      # 2. 设置 Python 环境 (使用 v5，支持最新规范)
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.9'
-
-      # 3. 安装依赖 (此程序仅使用标准库，无需额外安装，如有需要可取消注释)
-      - name: Install dependencies
+      - name: Install PyInstaller
         run: |
           python -m pip install --upgrade pip
-          # pip install -r requirements.txt
-
-      # 4. 代码规范检查 (示例)
-      - name: Lint with flake8
+          pip install pyinstaller
+      - name: Build EXE with PyInstaller
         run: |
-          pip install flake8
-          # stop the build if there are Python syntax errors or undefined names
-          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
-
-      # 5. 提示
-      - name: Build Status
-        run: echo "Environment check complete. Ready for manual local execution."
+          pyinstaller --noconsole --onefile --name "LabelCheckTool" label_check.py
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: LabelCheck-Exe
+          path: dist/LabelCheckTool.exe
