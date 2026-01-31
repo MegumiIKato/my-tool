@@ -53,7 +53,6 @@ def main():
 
     # 2. 弹出文件夹选择框
     folder_selected = filedialog.askdirectory(title="选择包含 JSON 文件的文件夹")
-
     if not folder_selected:
         print("未选择文件夹，程序运行取消。")
     else:
