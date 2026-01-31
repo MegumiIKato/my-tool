@@ -9,10 +9,10 @@ jobs:
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4 # 升级到 v4
 
     - name: Set up Python
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5 # 升级到 v5
       with:
         python-version: '3.10'
 
@@ -24,12 +24,14 @@ jobs:
     - name: Build EXE with PyInstaller
       run: |
         # --onefile: 打包成单个exe
-        # --console: 运行时不显示黑色的cmd窗口
+        # --noconsole: 运行时不显示黑色的cmd窗口
         # --name: 指定生成的exe文件名
-        pyinstaller --onefile --console --name "照片自动清理工具" clean_tool.py
+        pyinstaller --onefile --noconsole --name "照片自动清理工具" clean_tool.py
 
     - name: Upload Artifact
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4 # 必须升级到 v4 以解决报错
       with:
-        name: PhotoCleaner-Executable
+        name: PhotoCleaner-Executable # 生成的下载包名称
         path: dist/照片自动清理工具.exe
+        compression-level: 9 # 可选：设置压缩率
+        overwrite: true     # 可选：如果多次运行则覆盖旧的
