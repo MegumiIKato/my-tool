@@ -18,7 +18,7 @@ jobs:
           pip install pyinstaller
       - name: Build EXE with PyInstaller
         run: |
-          pyinstaller --noconsole --onefile --name "LabelCheckTool" label_check.py
+          pyinstaller --console --onefile --name "LabelCheckTool" label_check.py
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
