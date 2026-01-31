@@ -27,7 +27,7 @@ jobs:
         # --name: 指定生成的文件名
         # --console: 保留控制台窗口（因为程序里有print和input）
         # 如果不需要看到控制台，可以将 --console 改为 --noconsole
-        pyinstaller --onefile --name "json_number" main.py
+        pyinstaller --onefile --name "json_number" json_number.py
 
     - name: 上传构建结果 (Artifact)
       uses: actions/upload-artifact@v4
