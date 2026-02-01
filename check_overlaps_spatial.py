@@ -122,7 +122,7 @@ def main():
             # 查找并复制对应的 tif 文件
             # 尝试常见后缀名
             found_tif = False
-            for ext in ['.tif', '.tiff', '.TIF', '.TIFF']:
+            for ext in ['.jpg', '.jpeg', '.JPG', '.JPEG']:
                 tif_path = json_path.with_suffix(ext)
                 if tif_path.exists():
                     target_tif_path = target_json_path.with_suffix(ext)
@@ -132,7 +132,7 @@ def main():
             
             tqdm.write(f"[发现重叠] 源路径: {json_path}")
             if not found_tif:
-                tqdm.write(f"  [警告] 未找到对应的 TIF 图片文件")
+                tqdm.write(f"  [警告] 未找到对应的 JPG 图片文件")
 
     print("-" * 50)
     print(f"处理完成！")
