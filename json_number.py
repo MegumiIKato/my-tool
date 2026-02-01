@@ -8,7 +8,9 @@ from pathlib import Path
 
 def select_folder():
     root = tk.Tk()
-    root.withdraw()  # 隐藏主窗口
+    root.withdraw() 
+    # 强制弹窗显示在最前面
+    root.attributes('-topmost', True)
     folder_selected = filedialog.askdirectory(title="选择源文件夹")
     root.destroy()
     return folder_selected
@@ -16,14 +18,17 @@ def select_folder():
 def get_image_json_pairs(root_path):
     """递归获取所有图片及其对应的json文件对"""
     valid_extensions = ('.jpg', '.JPG', '.jpeg', '.JPEG')
-    folder_map = {} # 用于分散抽取：{文件夹路径: [文件名列表]}
+    folder_map = {} 
 
     for root, dirs, files in os.walk(root_path):
+        # 排除存放结果的文件夹本身，避免循环读取
+        if "照片检查+" in root:
+            continue
+            
         json_files = [f for f in files if f.lower().endswith('.json')]
         pairs = []
         for jf in json_files:
             base_name = os.path.splitext(jf)[0]
-            # 检查是否存在对应图片
             img_name = None
             for ext in valid_extensions:
                 if base_name + ext in files:
@@ -43,7 +48,6 @@ def dispersed_sample(folder_map, target_count=50):
     selected_pairs = []
     folders = list(folder_map.keys())
     
-    # 如果总数不足
     total_available = sum(len(v) for v in folder_map.values())
     if total_available <= target_count:
         for folder in folders:
@@ -51,18 +55,18 @@ def dispersed_sample(folder_map, target_count=50):
                 selected_pairs.append((folder, pair))
         return selected_pairs
 
-    # 循环从每个文件夹抽一个，直到满50个
-    while len(selected_pairs) < target_count:
+    # 模拟“轮询”抽取，保证分散度
+    while len(selected_pairs) < target_count and folders:
         random.shuffle(folders)
-        for folder in folders:
+        for folder in folders[:]:
             if folder_map[folder]:
                 idx = random.randrange(len(folder_map[folder]))
                 pair = folder_map[folder].pop(idx)
                 selected_pairs.append((folder, pair))
                 if len(selected_pairs) == target_count:
                     break
-        # 移除已抽空的文件夹
-        folders = [f for f in folders if folder_map[f]]
+            else:
+                folders.remove(folder)
         
     return selected_pairs
 
@@ -79,12 +83,17 @@ def main():
     print(f"共找到 {total_found} 组有效的图片-JSON对。")
 
     if total_found == 0:
+        root = tk.Tk()
+        root.withdraw()
         messagebox.showwarning("警告", "源文件夹内未找到有效的图片和同名JSON对！")
+        root.destroy()
         return
 
     # 准备目标文件夹
-    folder_name = "照片检查+" + os.path.basename(source_dir)
-    output_dir = os.path.join(source_dir, folder_name)
+    base_folder_name = os.path.basename(os.path.normpath(source_dir))
+    output_folder_name = f"照片检查+{base_folder_name}"
+    output_dir = os.path.join(source_dir, output_folder_name)
+    
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
 
@@ -92,32 +101,37 @@ def main():
     sampled_list = dispersed_sample(folder_map, 50)
     
     total_labels = 0
-    print("\n开始拷贝和统计进度:")
+    print(f"\n开始拷贝到: {output_folder_name}")
     
-    for i, (root, (img_name, json_name)) in enumerate(sampled_list):
-        # 拷贝图片
-        shutil.copy2(os.path.join(root, img_name), os.path.join(output_dir, img_name))
-        # 拷贝并统计JSON
-        json_src_path = os.path.join(root, json_name)
-        json_dst_path = os.path.join(output_dir, json_name)
-        shutil.copy2(json_src_path, json_dst_path)
+    for i, (root_path, (img_name, json_name)) in enumerate(sampled_list):
+        # 拷贝
+        shutil.copy2(os.path.join(root_path, img_name), os.path.join(output_dir, img_name))
+        json_src = os.path.join(root_path, json_name)
+        json_dst = os.path.join(output_dir, json_name)
+        shutil.copy2(json_src, json_dst)
         
+        # 统计
         try:
-            with open(json_dst_path, 'r', encoding='utf-8') as f:
+            with open(json_dst, 'r', encoding='utf-8') as f:
                 data = json.load(f)
                 total_labels += len(data.get('shapes', []))
-        except Exception as e:
-            print(f"读取文件 {json_name} 出错: {e}")
+        except:
+            pass
 
-        # 控制台进度显示
+        # 进度条
         percent = (i + 1) / len(sampled_list) * 100
         print(f"\r进度: [{i+1}/{len(sampled_list)}] {percent:.1f}%", end="")
 
     print("\n\n处理完成！")
-    result_msg = f"抽查任务完成！\n\n1. 已抽取: {len(sampled_list)} 张照片\n2. 存储位置: {folder_name}\n3. 标签总数: {total_labels}"
     
+    # 结果弹窗
     root = tk.Tk()
     root.withdraw()
+    root.attributes('-topmost', True)
+    result_msg = (f"抽查任务完成！\n\n"
+                  f"1. 目标文件夹: {output_folder_name}\n"
+                  f"2. 已抽取图片: {len(sampled_list)} 张\n"
+                  f"3. 标签总数 (Shapes): {total_labels}")
     messagebox.showinfo("统计结果", result_msg)
     root.destroy()
 

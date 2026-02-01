@@ -1,6 +1,7 @@
 name: JSON Number
+
 on:
-  workflow_dispatch: # 支持手动运行
+  workflow_dispatch: 
 
 jobs:
   build:
@@ -22,13 +23,15 @@ jobs:
 
     - name: Build EXE with PyInstaller
       run: |
-        # --onefile 打包成单个exe
-        # --console 显示控制台(满足要求4)
-        # --name 指定输出文件名
-        pyinstaller --onefile --console --name "照片抽取与统计" json_number.py
+        # --onefile: 单文件模式
+        # --console: 保留控制台显示进度
+        # --noconfirm: 覆盖现有build目录
+        pyinstaller --onefile --console --name "照片抽取与标签统计" json_number.py
 
     - name: Upload Artifact
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
-        name: LabelmeChecker-Executable
-        path: dist/照片抽取与统计.exe
+        name: LabelmeChecker-EXE
+        path: dist/照片抽取与标签统计.exe
+        if-no-files-found: error
+        retention-days: 90
