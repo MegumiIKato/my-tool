@@ -1,4 +1,4 @@
-name: Build JSON Number Tool
+name: JSON Number
 
 on:
   workflow_dispatch: # 允许手动触发构建

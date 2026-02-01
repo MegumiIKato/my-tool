@@ -1,4 +1,4 @@
-name: Build Windows EXE
+name: Overlaps Check
 
 on:
   workflow_dispatch: # 允许手动点击按钮触发打包
