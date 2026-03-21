@@ -1,3 +1,19 @@
+"""
+多边形重叠检测工具 (Polygon Overlap Checker)
+
+功能说明：
+- 检查 Labelme JSON 文件中的多边形标注是否存在重叠
+- 支持设置重叠面积阈值，默认阈值为 0.1
+- 自动修复：给重叠的多边形标签添加 "!!OVERLAP_" 前缀并排在前面
+- 将有问题文件的修复版本输出到 "ERROR_CHECK_RESULTS" 目录
+- 同时复制对应的图片文件
+
+使用场景：
+- 标注质量检查
+- 发现并标记重叠区域
+- 数据清洗前的预处理
+"""
+
 import json
 import shutil
 import tkinter as tk
@@ -7,10 +23,9 @@ from shapely.geometry import Polygon
 from shapely.strtree import STRtree
 from tqdm import tqdm
 
+
 def check_and_fix_overlap(json_path, threshold=0.1):
-    """
-    检查重叠并返回修改后的数据。如果没有重叠，返回 None。
-    """
+    """检查重叠并返回修改后的数据。如果没有重叠，返回 None。"""
     try:
         with open(json_path, 'r', encoding='utf-8') as f:
             data = json.load(f)
@@ -43,7 +58,7 @@ def check_and_fix_overlap(json_path, threshold=0.1):
     for i, poly_info in enumerate(polygons):
         curr_geom = poly_info['geom']
         possible_matches = tree.query(curr_geom, predicate='intersects')
-        
+
         for match_idx in possible_matches:
             if i == match_idx:
                 continue
@@ -58,7 +73,6 @@ def check_and_fix_overlap(json_path, threshold=0.1):
     if not overlap_indices:
         return None
 
-    # 有重叠，修改标签名并重排序
     error_shapes = []
     normal_shapes = []
     for i, poly_info in enumerate(polygons):
@@ -73,26 +87,23 @@ def check_and_fix_overlap(json_path, threshold=0.1):
     data['shapes'] = error_shapes + normal_shapes + other_shapes
     return data
 
+
 def main():
     root = tk.Tk()
     root.withdraw()
 
     print("=== Labelme 重叠检查与自动修复工具 ===")
-    
-    # 1. 选择源文件夹
+
     src_dir_str = filedialog.askdirectory(title="选择包含标注文件的根文件夹(如 A 文件夹)")
     if not src_dir_str:
         return
     src_dir = Path(src_dir_str)
 
-    # 2. 在选定文件夹内新建 ERROR_CHECK 文件夹
     dst_dir_name = "ERROR_CHECK_RESULTS"
     dst_dir = src_dir / dst_dir_name
-    
-    # 搜索所有 json 
-    # 注意：排除掉已经在结果文件夹中的 json，防止重复处理
+
     all_json_files = [
-        p for p in src_dir.rglob("*.json") 
+        p for p in src_dir.rglob("*.json")
         if dst_dir_name not in p.parts
     ]
 
@@ -106,21 +117,17 @@ def main():
     error_count = 0
     for json_path in tqdm(all_json_files):
         modified_data = check_and_fix_overlap(json_path)
-        
+
         if modified_data:
             error_count += 1
-            
-            # 计算相对路径，保持子文件夹结构 (A/A1/xxx.json -> ERROR_CHECK_RESULTS/A1/xxx.json)
+
             rel_path = json_path.relative_to(src_dir)
             target_json_path = dst_dir / rel_path
             target_json_path.parent.mkdir(parents=True, exist_ok=True)
 
-            # 保存修改后的 JSON
             with open(target_json_path, 'w', encoding='utf-8') as f:
                 json.dump(modified_data, f, indent=2, ensure_ascii=False)
-            
-            # 查找并复制对应的 tif 文件
-            # 尝试常见后缀名
+
             found_tif = False
             for ext in ['.jpg', '.jpeg', '.JPG', '.JPEG']:
                 tif_path = json_path.with_suffix(ext)
@@ -129,7 +136,7 @@ def main():
                     shutil.copy2(tif_path, target_tif_path)
                     found_tif = True
                     break
-            
+
             tqdm.write(f"[发现重叠] 源路径: {json_path}")
             if not found_tif:
                 tqdm.write(f"  [警告] 未找到对应的 JPG 图片文件")
@@ -140,8 +147,9 @@ def main():
     print(f"发现问题文件: {error_count}")
     if error_count > 0:
         print(f"请在以下路径查看结果: {dst_dir}")
-    
+
     input("\n按回车键退出...")
+
 
 if __name__ == "__main__":
     main()

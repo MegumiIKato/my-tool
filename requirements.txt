@@ -1,3 +1,4 @@
 shapely
 tqdm
 pyinstaller
+pandas
