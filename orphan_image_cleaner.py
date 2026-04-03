@@ -118,7 +118,7 @@ class OrphanImageCleaner:
 
         ttk.Label(scan_result_frame, text="扫描结果:", style='Header.TLabel').pack(anchor="w")
 
-        self.scan_labels = tk.Frame(scan_result_frame, style='Result.TFrame')
+        self.scan_labels = ttk.Frame(scan_result_frame)
         self.scan_labels.pack(fill="x", pady=8)
 
         self.lbl_paired = ttk.Label(self.scan_labels, text="有效配对: 0 对", style='Result.TLabel')
@@ -134,7 +134,7 @@ class OrphanImageCleaner:
         self.scan_labels.columnconfigure(1, weight=1)
         self.scan_labels.columnconfigure(2, weight=1)
 
-        self.folder_labels = tk.Frame(scan_result_frame, style='Result.TFrame')
+        self.folder_labels = ttk.Frame(scan_result_frame)
         self.folder_labels.pack(fill="x", pady=5)
 
         self.lbl_folder_count = ttk.Label(self.folder_labels, text="扫描文件夹: 0 个", style='Result.TLabel')
@@ -154,7 +154,7 @@ class OrphanImageCleaner:
 
         ttk.Label(clean_result_frame, text="清理结果:", style='Header.TLabel').pack(anchor="w")
 
-        self.clean_labels = tk.Frame(clean_result_frame, style='Result.TFrame')
+        self.clean_labels = ttk.Frame(clean_result_frame)
         self.clean_labels.pack(fill="x", pady=8)
 
         self.lbl_deleted = ttk.Label(self.clean_labels, text="已清理: 0 个", style='Result.TLabel')
