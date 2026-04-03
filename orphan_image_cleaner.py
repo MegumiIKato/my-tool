@@ -17,6 +17,18 @@ import os
 import tkinter as tk
 from tkinter import filedialog
 from tkinter import ttk
+from tkinter import font
+
+
+def get_font(family='Microsoft YaHei UI', size=10, bold=False):
+    available_fonts = tk.font.families()
+    if family in available_fonts:
+        return (family, size, 'bold' if bold else 'normal')
+    fallback_fonts = ['Segoe UI', 'Arial', 'Helvetica', 'System']
+    for fb in fallback_fonts:
+        if fb in available_fonts:
+            return (fb, size, 'bold' if bold else 'normal')
+    return (None, size, 'bold' if bold else 'normal')
 
 
 class OrphanImageCleaner:
@@ -25,6 +37,11 @@ class OrphanImageCleaner:
         self.root.title("孤立JPG/JSON文件清理工具")
         self.root.geometry("520x480")
         self.root.minsize(520, 480)
+
+        self.font_title = get_font(size=14, bold=True)
+        self.font_header = get_font(size=11, bold=True)
+        self.font_content = get_font(size=10)
+        self.font_action = get_font(size=11)
 
         self.target_path = tk.StringVar()
         self.scan_result = {"paired": 0, "orphan_jpg": 0, "orphan_json": 0, "folder_count": 0, "depth": 0}
@@ -40,26 +57,26 @@ class OrphanImageCleaner:
         style = ttk.Style()
         style.theme_use('clam')
 
-        style.configure('Title.TLabel', font=('Microsoft YaHei UI', 14, 'bold'), foreground='#2c3e50')
-        style.configure('Header.TLabel', font=('Microsoft YaHei UI', 11, 'bold'), foreground='#34495e')
-        style.configure('Content.TLabel', font=('Microsoft YaHei UI', 10), foreground='#57606f')
+        style.configure('Title.TLabel', font=self.font_title, foreground='#2c3e50')
+        style.configure('Header.TLabel', font=self.font_header, foreground='#34495e')
+        style.configure('Content.TLabel', font=self.font_content, foreground='#57606f')
 
-        style.configure('Custom.TRadiobutton', font=('Microsoft YaHei UI', 10), foreground='#2c3e50')
+        style.configure('Custom.TRadiobutton', font=self.font_content, foreground='#2c3e50')
         style.map('Custom.TRadiobutton',
             foreground=[('active', '#3498db')],
             indicatorcolor=[('selected', '#3498db'), ('!selected', '#95a5a6')]
         )
 
-        style.configure('Action.TButton', font=('Microsoft YaHei UI', 11), padding=(10, 5))
+        style.configure('Action.TButton', font=self.font_action, padding=(10, 5))
         style.map('Action.TButton',
             background=[('active', '#3498db'), ('!active', '#2980b9')],
             foreground=[('active', '#ffffff'), ('!active', '#ffffff')]
         )
 
-        style.configure('Browse.TButton', font=('Microsoft YaHei UI', 10), padding=(8, 3))
+        style.configure('Browse.TButton', font=self.font_content, padding=(8, 3))
 
         style.configure('Result.TFrame', background='#ecf0f1', relief='solid', borderwidth=1)
-        style.configure('Result.TLabel', font=('Microsoft YaHei UI', 10), background='#ecf0f1', foreground='#2c3e50')
+        style.configure('Result.TLabel', font=self.font_content, background='#ecf0f1', foreground='#2c3e50')
 
     def _create_widgets(self):
         self.root.configure(background='#ffffff')
@@ -88,7 +105,7 @@ class OrphanImageCleaner:
 
         ttk.Label(path_frame, text="选择文件夹:", style='Content.TLabel').pack(side="left")
 
-        self.path_entry = tk.Entry(path_frame, textvariable=self.target_path, width=35, font=('Microsoft YaHei UI', 10))
+        self.path_entry = tk.Entry(path_frame, textvariable=self.target_path, width=35, font=self.font_content)
         self.path_entry.pack(side="left", padx=8)
 
         ttk.Button(path_frame, text="浏览", command=self._browse_folder, style='Browse.TButton').pack(side="left")
