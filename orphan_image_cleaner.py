@@ -16,90 +16,138 @@
 import os
 import tkinter as tk
 from tkinter import filedialog
+from tkinter import ttk
 
 
 class OrphanImageCleaner:
     def __init__(self):
         self.root = tk.Tk()
         self.root.title("孤立JPG/JSON文件清理工具")
-        self.root.geometry("500x420")
-        self.root.resizable(False, False)
+        self.root.geometry("520x480")
+        self.root.minsize(520, 480)
 
         self.target_path = tk.StringVar()
-        self.scan_result = {"paired": 0, "orphan_jpg": 0, "orphan_json": 0}
+        self.scan_result = {"paired": 0, "orphan_jpg": 0, "orphan_json": 0, "folder_count": 0, "depth": 0}
         self.clean_result = {"deleted": 0, "paired": 0}
 
         self.mode_var = tk.StringVar(value="jpg")
         self.valid_extensions = ('.jpg', '.jpeg', '.json')
 
+        self._setup_style()
         self._create_widgets()
 
+    def _setup_style(self):
+        style = ttk.Style()
+        style.theme_use('clam')
+
+        style.configure('Title.TLabel', font=('Microsoft YaHei UI', 14, 'bold'), foreground='#2c3e50')
+        style.configure('Header.TLabel', font=('Microsoft YaHei UI', 11, 'bold'), foreground='#34495e')
+        style.configure('Content.TLabel', font=('Microsoft YaHei UI', 10), foreground='#57606f')
+
+        style.configure('Custom.TRadiobutton', font=('Microsoft YaHei UI', 10), foreground='#2c3e50')
+        style.map('Custom.TRadiobutton',
+            foreground=[('active', '#3498db')],
+            indicatorcolor=[('selected', '#3498db'), ('!selected', '#95a5a6')]
+        )
+
+        style.configure('Action.TButton', font=('Microsoft YaHei UI', 11), padding=(10, 5))
+        style.map('Action.TButton',
+            background=[('active', '#3498db'), ('!active', '#2980b9')],
+            foreground=[('active', '#ffffff'), ('!active', '#ffffff')]
+        )
+
+        style.configure('Browse.TButton', font=('Microsoft YaHei UI', 10), padding=(8, 3))
+
+        style.configure('Result.TFrame', background='#ecf0f1', relief='solid', borderwidth=1)
+        style.configure('Result.TLabel', font=('Microsoft YaHei UI', 10), background='#ecf0f1', foreground='#2c3e50')
+
     def _create_widgets(self):
-        mode_frame = tk.Frame(self.root, pady=10)
-        mode_frame.pack(fill="x", padx=20)
+        self.root.configure(background='#ffffff')
 
-        tk.Label(mode_frame, text="清理模式:", font=("Arial", 12)).pack(side="left")
+        mode_frame = tk.Frame(self.root, background='#ffffff', pady=15)
+        mode_frame.pack(fill="x", padx=25)
 
-        rb1 = tk.Radiobutton(
+        ttk.Label(mode_frame, text="清理模式:", style='Title.TLabel').pack(side="left")
+
+        rb1 = ttk.Radiobutton(
             mode_frame, text="删除孤立图片（无JSON的JPG）",
             variable=self.mode_var, value="jpg",
-            font=("Arial", 10)
+            style='Custom.TRadiobutton'
         )
-        rb1.pack(side="left", padx=10)
+        rb1.pack(side="left", padx=20)
 
-        rb2 = tk.Radiobutton(
+        rb2 = ttk.Radiobutton(
             mode_frame, text="删除孤立JSON（无JPG的JSON）",
             variable=self.mode_var, value="json",
-            font=("Arial", 10)
+            style='Custom.TRadiobutton'
         )
-        rb2.pack(side="left", padx=10)
+        rb2.pack(side="left", padx=20)
 
-        path_frame = tk.Frame(self.root, pady=5)
-        path_frame.pack(fill="x", padx=20)
+        path_frame = tk.Frame(self.root, background='#ffffff', pady=5)
+        path_frame.pack(fill="x", padx=25)
 
-        tk.Label(path_frame, text="选择文件夹:", font=("Arial", 11)).pack(side="left")
+        ttk.Label(path_frame, text="选择文件夹:", style='Content.TLabel').pack(side="left")
 
-        self.path_entry = tk.Entry(path_frame, textvariable=self.target_path, width=35)
-        self.path_entry.pack(side="left", padx=5)
+        self.path_entry = tk.Entry(path_frame, textvariable=self.target_path, width=35, font=('Microsoft YaHei UI', 10))
+        self.path_entry.pack(side="left", padx=8)
 
-        tk.Button(path_frame, text="浏览", command=self._browse_folder, width=8).pack(side="left")
+        ttk.Button(path_frame, text="浏览", command=self._browse_folder, style='Browse.TButton').pack(side="left")
 
-        scan_btn = tk.Button(self.root, text="开始扫描", command=self._scan_files, height=2, width=15)
-        scan_btn.pack(pady=5)
+        scan_btn = ttk.Button(self.root, text="开始扫描", command=self._scan_files, style='Action.TButton')
+        scan_btn.pack(pady=10)
 
-        scan_result_frame = tk.Frame(self.root, bd=2, relief="sunken")
-        scan_result_frame.pack(fill="x", padx=20, pady=5)
+        scan_result_frame = ttk.Frame(self.root, style='Result.TFrame', padding=15)
+        scan_result_frame.pack(fill="x", padx=25, pady=5)
 
-        tk.Label(scan_result_frame, text="扫描结果:", font=("Arial", 11, "bold")).pack(anchor="w")
+        ttk.Label(scan_result_frame, text="扫描结果:", style='Header.TLabel').pack(anchor="w")
 
-        self.scan_labels = tk.Frame(scan_result_frame)
-        self.scan_labels.pack(fill="x", pady=5)
+        self.scan_labels = tk.Frame(scan_result_frame, style='Result.TFrame')
+        self.scan_labels.pack(fill="x", pady=8)
 
-        self.lbl_paired = tk.Label(self.scan_labels, text="有效配对: 0 对", font=("Arial", 10))
-        self.lbl_paired.pack(side="left", padx=15)
+        self.lbl_paired = ttk.Label(self.scan_labels, text="有效配对: 0 对", style='Result.TLabel')
+        self.lbl_paired.grid(row=0, column=0, padx=20, sticky='w')
 
-        self.lbl_orphan_jpg = tk.Label(self.scan_labels, text="JPG孤立: 0 个", font=("Arial", 10))
-        self.lbl_orphan_jpg.pack(side="left", padx=15)
+        self.lbl_orphan_jpg = ttk.Label(self.scan_labels, text="JPG孤立: 0 个", style='Result.TLabel')
+        self.lbl_orphan_jpg.grid(row=0, column=1, padx=20, sticky='w')
 
-        self.lbl_orphan_json = tk.Label(self.scan_labels, text="JSON孤立: 0 个", font=("Arial", 10))
-        self.lbl_orphan_json.pack(side="left", padx=15)
+        self.lbl_orphan_json = ttk.Label(self.scan_labels, text="JSON孤立: 0 个", style='Result.TLabel')
+        self.lbl_orphan_json.grid(row=0, column=2, padx=20, sticky='w')
 
-        clean_btn = tk.Button(self.root, text="开始清理", command=self._clean_files, height=2, width=15)
-        clean_btn.pack(pady=5)
+        self.scan_labels.columnconfigure(0, weight=1)
+        self.scan_labels.columnconfigure(1, weight=1)
+        self.scan_labels.columnconfigure(2, weight=1)
 
-        clean_result_frame = tk.Frame(self.root, bd=2, relief="sunken")
-        clean_result_frame.pack(fill="x", padx=20, pady=5)
+        self.folder_labels = tk.Frame(scan_result_frame, style='Result.TFrame')
+        self.folder_labels.pack(fill="x", pady=5)
 
-        tk.Label(clean_result_frame, text="清理结果:", font=("Arial", 11, "bold")).pack(anchor="w")
+        self.lbl_folder_count = ttk.Label(self.folder_labels, text="扫描文件夹: 0 个", style='Result.TLabel')
+        self.lbl_folder_count.grid(row=0, column=0, padx=20, sticky='w')
 
-        self.clean_labels = tk.Frame(clean_result_frame)
-        self.clean_labels.pack(fill="x", pady=5)
+        self.lbl_depth = ttk.Label(self.folder_labels, text="嵌套层数: 0 层", style='Result.TLabel')
+        self.lbl_depth.grid(row=0, column=1, padx=20, sticky='w')
 
-        self.lbl_deleted = tk.Label(self.clean_labels, text="已清理: 0 个", font=("Arial", 10))
-        self.lbl_deleted.pack(side="left", padx=15)
+        self.folder_labels.columnconfigure(0, weight=1)
+        self.folder_labels.columnconfigure(1, weight=1)
 
-        self.lbl_paired_clean = tk.Label(self.clean_labels, text="有效配对: 0 对", font=("Arial", 10))
-        self.lbl_paired_clean.pack(side="left", padx=15)
+        clean_btn = ttk.Button(self.root, text="开始清理", command=self._clean_files, style='Action.TButton')
+        clean_btn.pack(pady=10)
+
+        clean_result_frame = ttk.Frame(self.root, style='Result.TFrame', padding=15)
+        clean_result_frame.pack(fill="x", padx=25, pady=5)
+
+        ttk.Label(clean_result_frame, text="清理结果:", style='Header.TLabel').pack(anchor="w")
+
+        self.clean_labels = tk.Frame(clean_result_frame, style='Result.TFrame')
+        self.clean_labels.pack(fill="x", pady=8)
+
+        self.lbl_deleted = ttk.Label(self.clean_labels, text="已清理: 0 个", style='Result.TLabel')
+        self.lbl_deleted.grid(row=0, column=0, padx=20, sticky='w')
+
+        self.lbl_paired_clean = ttk.Label(self.clean_labels, text="有效配对: 0 对", style='Result.TLabel')
+        self.lbl_paired_clean.grid(row=0, column=1, padx=20, sticky='w')
+
+        self.clean_labels.columnconfigure(0, weight=1)
+        self.clean_labels.columnconfigure(1, weight=1)
 
     def _browse_folder(self):
         folder = filedialog.askdirectory(title="选择需要清理的文件夹")
@@ -111,12 +159,22 @@ class OrphanImageCleaner:
         self.lbl_paired.config(text="有效配对: 0 对")
         self.lbl_orphan_jpg.config(text="JPG孤立: 0 个")
         self.lbl_orphan_json.config(text="JSON孤立: 0 个")
+        self.lbl_folder_count.config(text="扫描文件夹: 0 个")
+        self.lbl_depth.config(text="嵌套层数: 0 层")
         self.lbl_deleted.config(text="已清理: 0 个")
         self.lbl_paired_clean.config(text="有效配对: 0 对")
 
     def _is_valid_file(self, filename):
         _, ext = os.path.splitext(filename)
         return ext.lower() in self.valid_extensions
+
+    def _calculate_depth(self, target_path):
+        max_depth = 0
+        base_depth = target_path.rstrip(os.sep).count(os.sep)
+        for root, dirs, files in os.walk(target_path):
+            depth = root.count(os.sep) - base_depth
+            max_depth = max(max_depth, depth)
+        return max_depth
 
     def _scan_files(self):
         target_path = self.target_path.get()
@@ -126,7 +184,15 @@ class OrphanImageCleaner:
         jpg_names = set()
         json_names = set()
 
+        folder_count = 0
+        max_depth = 0
+        base_depth = target_path.rstrip(os.sep).count(os.sep)
+
         for root_dir, dirs, files in os.walk(target_path):
+            folder_count += 1
+            current_depth = root_dir.count(os.sep) - base_depth
+            max_depth = max(max_depth, current_depth)
+
             for file_name in files:
                 if not self._is_valid_file(file_name):
                     continue
@@ -146,12 +212,16 @@ class OrphanImageCleaner:
         self.scan_result = {
             "paired": len(paired_names),
             "orphan_jpg": len(orphan_jpg),
-            "orphan_json": len(orphan_json)
+            "orphan_json": len(orphan_json),
+            "folder_count": folder_count,
+            "depth": max_depth
         }
 
         self.lbl_paired.config(text=f"有效配对: {self.scan_result['paired']} 对")
         self.lbl_orphan_jpg.config(text=f"JPG孤立: {self.scan_result['orphan_jpg']} 个")
         self.lbl_orphan_json.config(text=f"JSON孤立: {self.scan_result['orphan_json']} 个")
+        self.lbl_folder_count.config(text=f"扫描文件夹: {self.scan_result['folder_count']} 个")
+        self.lbl_depth.config(text=f"嵌套层数: {self.scan_result['depth']} 层")
 
     def _clean_files(self):
         target_path = self.target_path.get()
