@@ -1,5 +1,5 @@
 """
-孤立图片清理工具 (Orphan Image Cleaner)
+孤立JPG/JSON文件清理工具
 
 功能说明：
 - 扫描选定目录及其子目录中的所有文件
@@ -21,7 +21,7 @@ from tkinter import filedialog
 class OrphanImageCleaner:
     def __init__(self):
         self.root = tk.Tk()
-        self.root.title("孤儿图片清理工具")
+        self.root.title("孤立JPG/JSON文件清理工具")
         self.root.geometry("500x420")
         self.root.resizable(False, False)
 
