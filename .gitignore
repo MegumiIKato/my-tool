@@ -11,3 +11,6 @@ my_labels/
 .agents/
 .claude/
 node_modules/
+
+TestData/
+AGENTS.md

@@ -3,8 +3,8 @@
 
 功能说明：
 - 从选定的文件夹中递归查找所有图片及其对应的 Labelme JSON 文件
-- 使用轮询算法从多个子文件夹中均匀分散抽取指定数量的样本（默认50张）
-- 将抽样的图片和 JSON 文件复制到 "照片检查+[原文件夹名]" 目录
+- 使用轮询算法从多个子文件夹中均匀分散抽取指定数量的样本
+- 将抽样的图片和 JSON 文件复制到指定输出目录
 - 统计并报告抽样结果中的标签（shapes）总数
 
 使用场景：
@@ -16,27 +16,23 @@ import os
 import json
 import random
 import shutil
-import tkinter as tk
-from tkinter import filedialog, messagebox
 from pathlib import Path
 
 
-def select_folder():
-    root = tk.Tk()
-    root.withdraw()
-    root.attributes('-topmost', True)
-    folder_selected = filedialog.askdirectory(title="选择源文件夹")
-    root.destroy()
-    return folder_selected
-
-
-def get_image_json_pairs(root_path):
-    """递归获取所有图片及其对应的json文件对"""
-    valid_extensions = ('.jpg', '.JPG', '.jpeg', '.JPEG')
+def get_image_json_pairs(root_path: str) -> dict[str, list[tuple[str, str]]]:
+    """递归获取所有图片及其对应的json文件对
+    
+    参数:
+        root_path: 根目录路径
+    
+    返回:
+        文件夹路径到 (图片名, json名) 列表的映射
+    """
+    valid_extensions = ('.jpg', '.JPG', '.jpeg', '.JPEG', '.png', '.PNG')
     folder_map = {}
 
     for root, dirs, files in os.walk(root_path):
-        if "照片检查+" in root:
+        if "照片检查+" in root or "抽样结果" in root:
             continue
 
         json_files = [f for f in files if f.lower().endswith('.json')]
@@ -58,8 +54,16 @@ def get_image_json_pairs(root_path):
     return folder_map
 
 
-def dispersed_sample(folder_map, target_count=50):
-    """从多个文件夹中尽量均匀分散地抽取"""
+def dispersed_sample(folder_map: dict, target_count: int) -> list[tuple[str, tuple[str, str]]]:
+    """从多个文件夹中尽量均匀分散地抽取
+    
+    参数:
+        folder_map: 文件夹映射
+        target_count: 目标抽取数量
+    
+    返回:
+        (文件夹路径, (图片名, json名)) 列表
+    """
     selected_pairs = []
     folders = list(folder_map.keys())
 
@@ -85,38 +89,36 @@ def dispersed_sample(folder_map, target_count=50):
     return selected_pairs
 
 
-def main():
-    source_dir = select_folder()
-    if not source_dir:
-        print("未选择文件夹，程序退出。")
-        return
+def run_sampler(source_dir: str, output_dir: str, sample_count: int = 50) -> tuple[str | None, str | None, dict]:
+    """执行抽样逻辑
+    
+    参数:
+        source_dir: 源文件夹路径
+        output_dir: 输出目录路径
+        sample_count: 抽样数量
+    
+    返回:
+        (output_path, error, stats)
+        - output_path: 输出目录路径，成功时返回
+        - error: 错误信息，无错误返回 None
+        - stats: {'sampled': int, 'labels': int, 'total_found': int}
+    """
+    if not os.path.isdir(source_dir):
+        return None, "源文件夹不存在或不是有效目录", {}
 
-    print(f"正在扫描文件夹: {source_dir}")
     folder_map = get_image_json_pairs(source_dir)
-
     total_found = sum(len(v) for v in folder_map.values())
-    print(f"共找到 {total_found} 组有效的图片-JSON对。")
 
     if total_found == 0:
-        root = tk.Tk()
-        root.withdraw()
-        messagebox.showwarning("警告", "源文件夹内未找到有效的图片和同名JSON对！")
-        root.destroy()
-        return
-
-    base_folder_name = os.path.basename(os.path.normpath(source_dir))
-    output_folder_name = f"照片检查+{base_folder_name}"
-    output_dir = os.path.join(source_dir, output_folder_name)
+        return None, "源文件夹内未找到有效的图片和同名JSON对", {}
 
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
 
-    sampled_list = dispersed_sample(folder_map, 50)
-
+    sampled_list = dispersed_sample(folder_map, sample_count)
     total_labels = 0
-    print(f"\n开始拷贝到: {output_folder_name}")
 
-    for i, (root_path, (img_name, json_name)) in enumerate(sampled_list):
+    for root_path, (img_name, json_name) in sampled_list:
         shutil.copy2(os.path.join(root_path, img_name), os.path.join(output_dir, img_name))
         json_src = os.path.join(root_path, json_name)
         json_dst = os.path.join(output_dir, json_name)
@@ -126,24 +128,26 @@ def main():
             with open(json_dst, 'r', encoding='utf-8') as f:
                 data = json.load(f)
                 total_labels += len(data.get('shapes', []))
-        except:
+        except Exception:
             pass
 
-        percent = (i + 1) / len(sampled_list) * 100
-        print(f"\r进度: [{i+1}/{len(sampled_list)}] {percent:.1f}%", end="")
+    stats = {
+        'sampled': len(sampled_list),
+        'labels': total_labels,
+        'total_found': total_found
+    }
 
-    print("\n\n处理完成！")
-
-    root = tk.Tk()
-    root.withdraw()
-    root.attributes('-topmost', True)
-    result_msg = (f"抽查任务完成！\n\n"
-                  f"1. 目标文件夹: {output_folder_name}\n"
-                  f"2. 已抽取图片: {len(sampled_list)} 张\n"
-                  f"3. 标签总数 (Shapes): {total_labels}")
-    messagebox.showinfo("统计结果", result_msg)
-    root.destroy()
+    return output_dir, None, stats
 
 
-if __name__ == "__main__":
-    main()
+def get_default_output_dir(source_dir: str) -> str:
+    """获取默认输出目录路径
+    
+    参数:
+        source_dir: 源文件夹路径
+    
+    返回:
+        默认输出目录路径 (源目录/抽样结果)
+    """
+    base_name = os.path.basename(os.path.normpath(source_dir))
+    return os.path.join(source_dir, f"抽样结果{base_name}")
