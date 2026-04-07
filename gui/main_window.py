@@ -15,7 +15,7 @@ HELP_TEXTS = {
     "image_count": [
         "选择扫描文件夹后点击“开始扫描”，结果会导出为 Excel。",
         "只在叶子文件夹内配对，支持 jpg、jpeg、png、tif、tiff。",
-        "结果文件保存在源目录，文件名为 image_count_result.xlsx。",
+        "结果文件保存在源目录，文件名为 文件计数统计结果.xlsx。",
     ],
     "orphan_cleaner": [
         "先扫描查看统计结果，再按需要选择删除孤立图片或孤立 JSON。",
@@ -25,12 +25,12 @@ HELP_TEXTS = {
     "label_validator": [
         "先选择待检查文件夹，再上传字典文件后开始检查。",
         "字典支持 csv、txt、xlsx、xls；表头第一列需为 label。",
-        "检查报告保存在源目录，文件名为 label_check_report.xlsx。",
+        "检查报告保存在源目录，文件名为 标签校验报告.xlsx。",
     ],
     "polygon_checker": [
         "选择源文件夹，可设置阈值和输出目录，然后开始检查。",
         "只检查 polygon，原始文件不会被修改，问题副本会单独导出。",
-        "默认生成 ERROR_CHECK_RESULTS 目录，并输出 polygon_overlap_report.xlsx 报告。",
+        "默认生成 ERROR_CHECK_RESULTS 目录，并输出 多边形重叠检查报告.xlsx 报告。",
     ],
     "sampler": [
         "选择源文件夹，设置抽样数量和输出目录后开始抽样。",

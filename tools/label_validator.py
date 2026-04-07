@@ -167,7 +167,7 @@ def run_validator(target_dir: str, dict_path: str) -> tuple[str | None, str | No
     if not error_list:
         ws.append([1, "-", "-", "未发现错误"])
     
-    output_path = os.path.join(target_dir, "label_check_report.xlsx")
+    output_path = os.path.join(target_dir, "标签校验报告.xlsx")
     wb.save(output_path)
     
     stats = {

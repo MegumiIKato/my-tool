@@ -36,7 +36,7 @@ IMAGE_EXTENSIONS = ('.jpg', '.jpeg', '.png', '.tif', '.tiff')
 - 叶子文件夹作为独立统计单元
 - 自动识别图片格式：jpg, jpeg, png, tif, tiff
 - 统计各后缀文件数量及总计
-- 导出 Excel 结果文件（`image_count_result.xlsx`）
+- 导出 Excel 结果文件（`文件计数统计结果.xlsx`）
 
 #### 2. 孤立文件清理
 
@@ -53,7 +53,7 @@ IMAGE_EXTENSIONS = ('.jpg', '.jpeg', '.png', '.tif', '.tiff')
 - 支持格式：csv, txt, xlsx, xls
 - 字典文件第一列列名必须为 `label`
 - 提供空白模板下载功能
-- 输出 xlsx 格式检查报告
+- 输出 xlsx 格式检查报告 `标签校验报告.xlsx`
 - 统计字段中 `error_count` 表示问题文件数，`error_item_count` 表示问题条目数
 
 #### 4. 多边形重叠检查
@@ -64,7 +64,7 @@ IMAGE_EXTENSIONS = ('.jpg', '.jpeg', '.png', '.tif', '.tiff')
 - 问题标签在导出副本中标记为 `[重叠] 原标签`
 - 不修改原始文件，仅输出到 `ERROR_CHECK_RESULTS` 目录
 - 保留原目录结构，并复制对应图片文件
-- 生成 xlsx 格式检查报告 `polygon_overlap_report.xlsx`
+- 生成 xlsx 格式检查报告 `多边形重叠检查报告.xlsx`
 - GUI 中已集成为独立工具面板
 - 默认会排除本次输出目录，避免把导出结果再次扫回源数据
 
@@ -439,7 +439,7 @@ IMAGE_EXTENSIONS = ('.jpg', '.jpeg', '.png', '.tif', '.tiff')
 2. 当前标记策略为修改导出副本中的 `label`，格式：`[重叠] 原标签`
 3. 不再使用 `flags` 标记重叠问题
 4. 检查结果目录默认是源目录下的 `ERROR_CHECK_RESULTS`
-5. 检查报告文件名为 `polygon_overlap_report.xlsx`
+5. 检查报告文件名为 `多边形重叠检查报告.xlsx`
 6. GUI 面板位于 `gui/main_window.py` 中的 `PolygonOverlapPanel`
 
 ### 工具函数设计模式

@@ -62,7 +62,7 @@ def run_count(root_folder: str):
             total_json += result['json_count']
             total_matched += result['paired']
     
-    output_path = os.path.join(root_folder, "image_count_result.xlsx")
+    output_path = os.path.join(root_folder, "文件计数统计结果.xlsx")
     wb.save(output_path)
     
     stats = {

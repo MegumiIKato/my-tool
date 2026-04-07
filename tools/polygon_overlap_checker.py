@@ -22,7 +22,7 @@ from core.file_scanner import IMAGE_EXTENSIONS
 
 
 DEFAULT_OUTPUT_DIR_NAME = "ERROR_CHECK_RESULTS"
-REPORT_FILE_NAME = "polygon_overlap_report.xlsx"
+REPORT_FILE_NAME = "多边形重叠检查报告.xlsx"
 OVERLAP_LABEL_PREFIX = "[重叠] "
 
 
