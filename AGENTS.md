@@ -44,7 +44,7 @@ IMAGE_EXTENSIONS = ('.jpg', '.jpeg', '.png', '.tif', '.tiff')
 - 叶子文件夹内独立配对判断（跨文件夹不配对）
 - **特殊配对检测**：同名多格式图片+JSON（如 `1.jpg` + `1.png` + `1.json`）
 - 特殊配对不删除，在报告中列出详情供用户手动处理
-- 清理前弹窗确认
+- 清理前弹窗确认，弹窗需绑定主窗口、居中显示并保持统一样式
 - 支持图片格式：jpg, jpeg, png, tif, tiff
 
 #### 3. 标签正确性检查
@@ -53,6 +53,7 @@ IMAGE_EXTENSIONS = ('.jpg', '.jpeg', '.png', '.tif', '.tiff')
 - 支持格式：csv, txt, xlsx, xls
 - 字典文件第一列列名必须为 `label`
 - 提供空白模板下载功能
+- “格式说明”弹窗需使用项目统一字体与默认界面样式，不使用额外等宽字体
 - 输出 xlsx 格式检查报告 `标签校验报告.xlsx`
 - 统计字段中 `error_count` 表示问题文件数，`error_item_count` 表示问题条目数
 
@@ -133,8 +134,17 @@ python main.py
 ### 打包成 EXE (使用 PyInstaller)
 
 ```bash
-pyinstaller --noconfirm --onefile --console --name "LabelmeToolbox" main.py
+pyinstaller --noconfirm --clean --onefile --windowed --name "LabelMe工具箱" main.py
 ```
+
+### GitHub Actions 手动打包
+
+- 工作流文件：`.github/workflows/build-labelme-toolbox.yml`
+- 触发方式：GitHub `Actions` 页面手动运行 `手动打包 LabelMe 工具箱`
+- 运行环境：`windows-latest`
+- 构建产物：`dist/LabelMe工具箱.exe`
+- Artifact 名称：`LabelMe工具箱-windows-exe`
+- 工作流已设置 `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true` 以兼容 GitHub Actions Node 24 运行环境
 
 ### 代码检查
 
@@ -259,6 +269,8 @@ except Exception as e:
 - UI 布局在 `_create_xxx()` 方法中
 - 业务逻辑使用私有方法（以 `_` 开头）
 - 按钮文字颜色必须显式设置 `text_color="#FFFFFF"`
+- 自定义弹窗统一使用主窗口内模态样式，优先复用 `create_modal_window()` 与 `create_modal_header()`
+- 弹窗字体统一使用 `APP_FONT` / `APP_FONT_BOLD`，避免使用 `Courier New` 等单独指定字体
 
 ```python
 class ImageCountPanel(ctk.CTkFrame):
