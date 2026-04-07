@@ -1,4 +1,5 @@
 import customtkinter as ctk
+import platform
 
 
 ctk.set_appearance_mode("light")
@@ -35,8 +36,15 @@ COLOR_TEXT_MUTED = "#94A3B8"        # 弱化文字颜色（浅灰，用于提示
 COLOR_SIDEBAR_SELECTED = "#EFF6FF"  # 侧边栏按钮选中背景色
 
 
-# 字体配置 - 微软雅黑
-APP_FONT = ("Microsoft YaHei UI", 14)         # 常规字体
-APP_FONT_BOLD = ("Microsoft YaHei UI", 14, "bold")     # 粗体
-APP_FONT_HEADER = ("Microsoft YaHei UI", 20, "bold")   # 标题字体
-APP_FONT_SMALL = ("Microsoft YaHei UI", 12)            # 小号字体
+# 字体配置 - 按平台选择更稳定的中文字体，避免字形下沿被裁切
+if platform.system() == "Windows":
+    FONT_FAMILY = "Microsoft YaHei UI"
+elif platform.system() == "Darwin":
+    FONT_FAMILY = "PingFang SC"
+else:
+    FONT_FAMILY = "Noto Sans CJK SC"
+
+APP_FONT = (FONT_FAMILY, 14)         # 常规字体
+APP_FONT_BOLD = (FONT_FAMILY, 14, "bold")     # 粗体
+APP_FONT_HEADER = (FONT_FAMILY, 20, "bold")   # 标题字体
+APP_FONT_SMALL = (FONT_FAMILY, 12)            # 小号字体

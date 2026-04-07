@@ -1,155 +1,330 @@
 """
-多边形重叠检测工具 (Polygon Overlap Checker)
+多边形重叠检查工具。
 
 功能说明：
-- 检查 Labelme JSON 文件中的多边形标注是否存在重叠
-- 支持设置重叠面积阈值，默认阈值为 0.1
-- 自动修复：给重叠的多边形标签添加 "!!OVERLAP_" 前缀并排在前面
-- 将有问题文件的修复版本输出到 "ERROR_CHECK_RESULTS" 目录
-- 同时复制对应的图片文件
-
-使用场景：
-- 标注质量检查
-- 发现并标记重叠区域
-- 数据清洗前的预处理
+- 递归扫描目录中的 Labelme JSON 文件
+- 检查 polygon 标注之间是否存在重叠
+- 对问题 shape 的标签写入 [重叠] 前缀，并将问题 shape 排到前面
+- 将有问题的 JSON 和对应图片复制到输出目录，保留原目录结构
+- 生成 xlsx 格式的检查报告
 """
 
 import json
+import os
 import shutil
-import tkinter as tk
-from tkinter import filedialog
 from pathlib import Path
+
+from openpyxl import Workbook
 from shapely.geometry import Polygon
 from shapely.strtree import STRtree
-from tqdm import tqdm
+
+from core.file_scanner import IMAGE_EXTENSIONS
 
 
-def check_and_fix_overlap(json_path, threshold=0.1):
-    """检查重叠并返回修改后的数据。如果没有重叠，返回 None。"""
+DEFAULT_OUTPUT_DIR_NAME = "ERROR_CHECK_RESULTS"
+REPORT_FILE_NAME = "polygon_overlap_report.xlsx"
+OVERLAP_LABEL_PREFIX = "[重叠] "
+
+
+def _iter_json_files(source_dir: Path, output_dir: Path) -> list[Path]:
+    """递归获取待检查的 JSON 文件，跳过结果目录。"""
+    json_files = []
+
+    for json_path in source_dir.rglob("*.json"):
+        try:
+            json_path.relative_to(output_dir)
+            continue
+        except ValueError:
+            json_files.append(json_path)
+
+    return json_files
+
+
+def _find_image_for_json(json_path: Path) -> Path | None:
+    """查找与 JSON 同名的图片文件。"""
+    for ext in IMAGE_EXTENSIONS:
+        image_path = json_path.with_suffix(ext)
+        if image_path.exists():
+            return image_path
+    return None
+
+
+def _build_polygon_shape(shape: dict) -> Polygon | None:
+    """将 polygon shape 转为可计算的几何对象。"""
+    if shape.get("shape_type") != "polygon":
+        return None
+
+    points = shape.get("points", [])
+    if len(points) < 3:
+        return None
+
     try:
-        with open(json_path, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-    except Exception as e:
-        print(f"\n[读取跳过] 无法读取 {json_path}: {e}")
+        polygon = Polygon(points)
+    except Exception:
         return None
 
-    shapes = data.get('shapes', [])
-    if not shapes:
+    if not polygon.is_valid:
+        polygon = polygon.buffer(0)
+
+    if polygon.is_empty or polygon.area <= 0:
         return None
+
+    return polygon
+
+
+def _mark_overlap_label(label: str) -> str:
+    """为有问题的标签增加可见前缀。"""
+    clean_label = str(label or "").strip()
+    if clean_label.startswith(OVERLAP_LABEL_PREFIX):
+        return clean_label
+    return f"{OVERLAP_LABEL_PREFIX}{clean_label}" if clean_label else OVERLAP_LABEL_PREFIX.strip()
+
+
+def _format_overlap_pairs(polygons: list[dict], overlap_pairs: set[tuple[int, int]]) -> str:
+    """格式化重叠对信息，用于报告展示。"""
+    pair_texts = []
+
+    for left_index, right_index in sorted(overlap_pairs):
+        left_label = str(polygons[left_index]["shape"].get("label", "")).strip() or "<空标签>"
+        right_label = str(polygons[right_index]["shape"].get("label", "")).strip() or "<空标签>"
+        pair_texts.append(f"{left_label} <-> {right_label}")
+
+    return "；".join(pair_texts)
+
+
+def _write_report(output_path: Path, details: list[dict]) -> str:
+    """生成 xlsx 格式报告。"""
+    report_path = output_path / REPORT_FILE_NAME
+
+    workbook = Workbook()
+    worksheet = workbook.active
+    worksheet.title = "重叠检查报告"
+    worksheet.append(["序号", "文件路径", "问题形状数", "重叠对数", "重叠情况", "提示"])
+
+    row_index = 1
+    for detail in details:
+        if detail["overlap_shape_count"] <= 0:
+            continue
+
+        worksheet.append([
+            row_index,
+            detail["file"],
+            detail["overlap_shape_count"],
+            detail["overlap_pair_count"],
+            detail["overlap_pairs_text"],
+            detail["warning"],
+        ])
+        row_index += 1
+
+    if row_index == 1:
+        worksheet.append([1, "-", 0, 0, "未发现重叠问题", ""])
+
+    workbook.save(report_path)
+    return str(report_path)
+
+
+def analyze_overlap(json_path: str, threshold: float = 0.1) -> tuple[dict | None, dict]:
+    """分析单个 JSON 的多边形重叠情况。"""
+    detail = {
+        "has_overlap": False,
+        "overlap_shape_count": 0,
+        "overlap_pair_count": 0,
+        "overlap_pairs_text": "",
+        "warning": "",
+    }
+
+    try:
+        with open(json_path, "r", encoding="utf-8") as file:
+            data = json.load(file)
+    except Exception as exc:
+        detail["warning"] = f"文件读取失败: {str(exc)}"
+        return None, detail
+
+    shapes = data.get("shapes", [])
+    if not shapes:
+        return None, detail
 
     polygons = []
     other_shapes = []
-    for i, s in enumerate(shapes):
-        if s.get('shape_type') == 'polygon' and len(s.get('points', [])) >= 3:
-            poly = Polygon(s['points'])
-            if not poly.is_valid:
-                poly = poly.buffer(0)
-            polygons.append({'orig_data': s, 'geom': poly})
-        else:
-            other_shapes.append(s)
+    invalid_polygon_count = 0
 
-    if not polygons:
-        return None
+    for index, shape in enumerate(shapes):
+        polygon = _build_polygon_shape(shape)
+        if polygon is None:
+            if shape.get("shape_type") == "polygon":
+                points = shape.get("points", [])
+                if len(points) >= 3:
+                    invalid_polygon_count += 1
+            other_shapes.append(shape)
+            continue
 
-    geom_list = [p['geom'] for p in polygons]
+        polygons.append({
+            "index": index,
+            "shape": shape,
+            "geom": polygon,
+        })
+
+    if invalid_polygon_count > 0:
+        detail["warning"] = f"发现 {invalid_polygon_count} 个无效 polygon，已跳过"
+
+    if len(polygons) < 2:
+        return None, detail
+
+    geom_list = [item["geom"] for item in polygons]
     tree = STRtree(geom_list)
     overlap_indices = set()
+    overlap_pairs = set()
 
-    for i, poly_info in enumerate(polygons):
-        curr_geom = poly_info['geom']
-        possible_matches = tree.query(curr_geom, predicate='intersects')
+    for current_index, polygon_info in enumerate(polygons):
+        current_geom = polygon_info["geom"]
 
-        for match_idx in possible_matches:
-            if i == match_idx:
+        try:
+            match_indices = tree.query(current_geom, predicate="intersects")
+        except Exception as exc:
+            detail["warning"] = f"几何计算失败: {str(exc)}"
+            return None, detail
+
+        for match_index in match_indices:
+            if current_index == match_index:
                 continue
+
+            pair = tuple(sorted((current_index, match_index)))
+            if pair in overlap_pairs:
+                continue
+
             try:
-                intersection_area = curr_geom.intersection(polygons[match_idx]['geom']).area
-                if intersection_area > threshold:
-                    overlap_indices.add(i)
-                    overlap_indices.add(match_idx)
-            except:
+                intersection_area = current_geom.intersection(polygons[match_index]["geom"]).area
+            except Exception:
                 continue
+
+            if intersection_area > threshold:
+                overlap_indices.add(current_index)
+                overlap_indices.add(match_index)
+                overlap_pairs.add(pair)
 
     if not overlap_indices:
-        return None
+        return None, detail
 
     error_shapes = []
     normal_shapes = []
-    for i, poly_info in enumerate(polygons):
-        s_data = poly_info['orig_data']
-        if i in overlap_indices:
-            if not s_data['label'].startswith('!!OVERLAP_'):
-                s_data['label'] = f"!!OVERLAP_{s_data['label']}"
-            error_shapes.append(s_data)
+
+    for polygon_index, polygon_info in enumerate(polygons):
+        shape_data = dict(polygon_info["shape"])
+
+        if polygon_index in overlap_indices:
+            shape_data["label"] = _mark_overlap_label(shape_data.get("label", ""))
+            error_shapes.append(shape_data)
         else:
-            normal_shapes.append(s_data)
+            normal_shapes.append(shape_data)
 
-    data['shapes'] = error_shapes + normal_shapes + other_shapes
-    return data
+    data["shapes"] = error_shapes + normal_shapes + other_shapes
+    detail["has_overlap"] = True
+    detail["overlap_shape_count"] = len(overlap_indices)
+    detail["overlap_pair_count"] = len(overlap_pairs)
+    detail["overlap_pairs_text"] = _format_overlap_pairs(polygons, overlap_pairs)
+    return data, detail
 
 
-def main():
-    root = tk.Tk()
-    root.withdraw()
+def run_polygon_overlap_check(
+    source_dir: str,
+    threshold: float = 0.1,
+    output_dir: str | None = None,
+) -> tuple[str | None, str | None, dict]:
+    """批量执行多边形重叠检查。"""
+    empty_stats = {
+        "total_files": 0,
+        "checked_files": 0,
+        "error_files": 0,
+        "skipped_files": 0,
+        "total_overlap_shapes": 0,
+        "total_overlap_pairs": 0,
+        "report_path": "",
+        "details": [],
+    }
 
-    print("=== Labelme 重叠检查与自动修复工具 ===")
+    if not source_dir:
+        return None, "未选择源文件夹", empty_stats
 
-    src_dir_str = filedialog.askdirectory(title="选择包含标注文件的根文件夹(如 A 文件夹)")
-    if not src_dir_str:
-        return
-    src_dir = Path(src_dir_str)
+    source_path = Path(source_dir)
+    if not source_path.is_dir():
+        return None, "源文件夹不存在或不是有效目录", empty_stats
 
-    dst_dir_name = "ERROR_CHECK_RESULTS"
-    dst_dir = src_dir / dst_dir_name
+    if threshold < 0:
+        return None, "重叠面积阈值不能小于 0", empty_stats
 
-    all_json_files = [
-        p for p in src_dir.rglob("*.json")
-        if dst_dir_name not in p.parts
-    ]
+    if output_dir:
+        output_path = Path(output_dir)
+    else:
+        output_path = source_path / DEFAULT_OUTPUT_DIR_NAME
+
+    output_path.mkdir(parents=True, exist_ok=True)
+
+    all_json_files = _iter_json_files(source_path, output_path)
+    empty_stats["total_files"] = len(all_json_files)
 
     if not all_json_files:
-        print("未找到任何 JSON 文件。")
-        input("按回车退出...")
-        return
+        return None, "源文件夹内未找到 JSON 文件", empty_stats
 
-    print(f"找到 {len(all_json_files)} 个 JSON 文件。正在检查...")
+    stats = {
+        "total_files": len(all_json_files),
+        "checked_files": 0,
+        "error_files": 0,
+        "skipped_files": 0,
+        "total_overlap_shapes": 0,
+        "total_overlap_pairs": 0,
+        "report_path": "",
+        "details": [],
+    }
 
-    error_count = 0
-    for json_path in tqdm(all_json_files):
-        modified_data = check_and_fix_overlap(json_path)
+    for json_file in all_json_files:
+        modified_data, detail = analyze_overlap(str(json_file), threshold)
+        relative_path = os.path.relpath(json_file, source_path)
 
-        if modified_data:
-            error_count += 1
+        if detail["warning"].startswith("文件读取失败"):
+            stats["skipped_files"] += 1
+            stats["details"].append({
+                "file": relative_path,
+                "overlap_shape_count": 0,
+                "overlap_pair_count": 0,
+                "overlap_pairs_text": "",
+                "image_found": False,
+                "warning": detail["warning"],
+            })
+            continue
 
-            rel_path = json_path.relative_to(src_dir)
-            target_json_path = dst_dir / rel_path
-            target_json_path.parent.mkdir(parents=True, exist_ok=True)
+        stats["checked_files"] += 1
 
-            with open(target_json_path, 'w', encoding='utf-8') as f:
-                json.dump(modified_data, f, indent=2, ensure_ascii=False)
+        if not modified_data:
+            continue
 
-            found_tif = False
-            for ext in ['.jpg', '.jpeg', '.JPG', '.JPEG']:
-                tif_path = json_path.with_suffix(ext)
-                if tif_path.exists():
-                    target_tif_path = target_json_path.with_suffix(ext)
-                    shutil.copy2(tif_path, target_tif_path)
-                    found_tif = True
-                    break
+        target_json_path = output_path / relative_path
+        target_json_path.parent.mkdir(parents=True, exist_ok=True)
 
-            tqdm.write(f"[发现重叠] 源路径: {json_path}")
-            if not found_tif:
-                tqdm.write(f"  [警告] 未找到对应的 JPG 图片文件")
+        with open(target_json_path, "w", encoding="utf-8") as file:
+            json.dump(modified_data, file, indent=2, ensure_ascii=False)
 
-    print("-" * 50)
-    print(f"处理完成！")
-    print(f"共检查文件: {len(all_json_files)}")
-    print(f"发现问题文件: {error_count}")
-    if error_count > 0:
-        print(f"请在以下路径查看结果: {dst_dir}")
+        image_path = _find_image_for_json(json_file)
+        image_found = image_path is not None
 
-    input("\n按回车键退出...")
+        if image_path:
+            target_image_path = target_json_path.with_suffix(image_path.suffix)
+            shutil.copy2(image_path, target_image_path)
 
+        warning = detail["warning"]
+        if not image_found:
+            warning = f"{warning}；未找到对应图片" if warning else "未找到对应图片"
 
-if __name__ == "__main__":
-    main()
+        stats["error_files"] += 1
+        stats["total_overlap_shapes"] += detail["overlap_shape_count"]
+        stats["total_overlap_pairs"] += detail["overlap_pair_count"]
+        stats["details"].append({
+            "file": relative_path,
+            "overlap_shape_count": detail["overlap_shape_count"],
+            "overlap_pair_count": detail["overlap_pair_count"],
+            "overlap_pairs_text": detail["overlap_pairs_text"],
+            "image_found": image_found,
+            "warning": warning,
+        })
+
+    stats["report_path"] = _write_report(output_path, stats["details"])
+    return str(output_path), None, stats

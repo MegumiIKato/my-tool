@@ -8,6 +8,7 @@ from tools.image_count import run_count
 from tools.image_json_sampler import run_sampler, get_default_output_dir
 from tools.label_validator import run_validator, export_template
 from tools.orphan_image_cleaner import run_scan, run_clean
+from tools.polygon_overlap_checker import run_polygon_overlap_check
 
 
 class OrphanCleanerPanel(ctk.CTkFrame):
@@ -582,6 +583,264 @@ class LabelValidatorPanel(ctk.CTkFrame):
                 subprocess.run(["open", result_folder])
 
 
+class PolygonOverlapPanel(ctk.CTkFrame):
+    """多边形重叠检查工具面板"""
+
+    def __init__(self, master, **kwargs):
+        super().__init__(master, fg_color="transparent", **kwargs)
+
+        self.result_path = None
+        self._create_ui()
+
+    def _create_ui(self):
+        self.title_label = ctk.CTkLabel(
+            self, text="多边形重叠检查",
+            font=APP_FONT_HEADER, text_color=COLOR_TEXT_PRIMARY
+        )
+        self.title_label.pack(anchor="w", pady=(20, 10), padx=20)
+
+        self.desc_label = ctk.CTkLabel(
+            self,
+            text="检查 Labelme JSON 中 polygon 标注是否重叠，并导出问题文件副本",
+            font=APP_FONT, text_color=COLOR_TEXT_SECONDARY
+        )
+        self.desc_label.pack(anchor="w", pady=(0, 20), padx=20)
+
+        self.params_card = ctk.CTkFrame(self, fg_color=COLOR_BG_CARD, corner_radius=12)
+        self.params_card.pack(fill="x", padx=20, pady=(0, 15))
+
+        self.source_selector = PathSelector(
+            self.params_card, label="源文件夹"
+        )
+        self.source_selector.pack(fill="x", padx=15, pady=(15, 10))
+
+        self.output_frame = ctk.CTkFrame(self.params_card, fg_color="transparent")
+        self.output_frame.pack(fill="x", padx=15, pady=(0, 10))
+
+        self.output_label = ctk.CTkLabel(
+            self.output_frame, text="输出目录", font=APP_FONT,
+            text_color=COLOR_TEXT_SECONDARY
+        )
+        self.output_label.pack(side="left", padx=(0, 10))
+
+        self.output_var = ctk.StringVar()
+        self.output_entry = ctk.CTkEntry(
+            self.output_frame, textvariable=self.output_var, font=APP_FONT,
+            placeholder_text="默认: 源文件夹/ERROR_CHECK_RESULTS",
+            placeholder_text_color=COLOR_TEXT_MUTED,
+            fg_color=COLOR_BG_INPUT, border_color=COLOR_BORDER
+        )
+        self.output_entry.pack(side="left", fill="x", expand=True, padx=(0, 10))
+
+        self.btn_default = ctk.CTkButton(
+            self.output_frame, text="默认", font=APP_FONT,
+            width=60, fg_color=COLOR_TEXT_MUTED, hover_color=COLOR_BORDER,
+            text_color="#FFFFFF",
+            command=self._set_default_output
+        )
+        self.btn_default.pack(side="left", padx=(0, 10))
+
+        self.btn_browse_output = ctk.CTkButton(
+            self.output_frame, text="浏览", font=APP_FONT,
+            width=80, fg_color=COLOR_PRIMARY, hover_color=COLOR_PRIMARY_HOVER,
+            text_color="#FFFFFF",
+            command=self._browse_output
+        )
+        self.btn_browse_output.pack(side="left")
+
+        self.threshold_frame = ctk.CTkFrame(self.params_card, fg_color="transparent")
+        self.threshold_frame.pack(fill="x", padx=15, pady=(0, 10))
+
+        self.threshold_label = ctk.CTkLabel(
+            self.threshold_frame, text="重叠面积阈值", font=APP_FONT,
+            text_color=COLOR_TEXT_SECONDARY
+        )
+        self.threshold_label.pack(side="left", padx=(0, 10))
+
+        self.threshold_var = ctk.StringVar(value="0.1")
+        self.threshold_entry = ctk.CTkEntry(
+            self.threshold_frame, textvariable=self.threshold_var, font=APP_FONT,
+            width=100,
+            fg_color=COLOR_BG_INPUT, border_color=COLOR_BORDER
+        )
+        self.threshold_entry.pack(side="left", padx=(0, 10))
+
+        self.threshold_hint = ctk.CTkLabel(
+            self.threshold_frame,
+            text="说明：当两个 polygon 的交集面积大于该值时，判定为重叠。默认 0.1。",
+            font=APP_FONT_SMALL, text_color=COLOR_TEXT_MUTED
+        )
+        self.threshold_hint.pack(side="left")
+
+        self.info_label = ctk.CTkLabel(
+            self.params_card,
+            text="仅检查 polygon；问题标签会改为 [重叠] 原标签；不修改原始文件",
+            font=APP_FONT_SMALL, text_color=COLOR_TEXT_MUTED
+        )
+        self.info_label.pack(anchor="w", padx=15, pady=(0, 15))
+
+        self.buttons_card = ctk.CTkFrame(self, fg_color="transparent")
+        self.buttons_card.pack(fill="x", padx=20, pady=(0, 15))
+
+        self.btn_run = ctk.CTkButton(
+            self.buttons_card, text="开始检查",
+            font=APP_FONT_BOLD, height=45,
+            fg_color=COLOR_PRIMARY, hover_color=COLOR_PRIMARY_HOVER,
+            text_color="#FFFFFF",
+            command=self._run_checker
+        )
+        self.btn_run.pack(side="left", padx=(0, 10))
+
+        self.btn_open_folder = ctk.CTkButton(
+            self.buttons_card, text="打开结果文件夹",
+            font=APP_FONT, height=45,
+            fg_color=COLOR_SUCCESS, hover_color=COLOR_SUCCESS,
+            text_color="#FFFFFF",
+            command=self._open_result_folder,
+            state="disabled"
+        )
+        self.btn_open_folder.pack(side="left", padx=(0, 10))
+
+        self.btn_clear = ctk.CTkButton(
+            self.buttons_card, text="清空",
+            font=APP_FONT, height=45,
+            fg_color=COLOR_TEXT_MUTED, hover_color=COLOR_BORDER,
+            text_color="#FFFFFF",
+            command=self._clear_input
+        )
+        self.btn_clear.pack(side="left")
+
+        self.log_card = ctk.CTkFrame(self, fg_color=COLOR_BG_CARD, corner_radius=12)
+        self.log_card.pack(fill="both", expand=True, padx=20, pady=(0, 20))
+
+        self.log_label = ctk.CTkLabel(
+            self.log_card, text="执行日志",
+            font=APP_FONT_BOLD, text_color=COLOR_TEXT_PRIMARY
+        )
+        self.log_label.pack(anchor="w", padx=15, pady=(10, 5))
+
+        self.log_viewer = LogViewer(self.log_card, height=200)
+        self.log_viewer.pack(fill="both", expand=True, padx=10, pady=(0, 10))
+
+    def _get_default_output_dir(self, source_dir: str) -> str:
+        return os.path.join(source_dir, "ERROR_CHECK_RESULTS")
+
+    def _set_default_output(self):
+        source_dir = self.source_selector.get().strip()
+        if not source_dir:
+            self.log_viewer.append("请先选择源文件夹")
+            return
+
+        self.output_var.set(self._get_default_output_dir(source_dir))
+
+    def _browse_output(self):
+        folder = filedialog.askdirectory(title="选择输出目录")
+        if folder:
+            self.output_var.set(folder)
+
+    def _run_checker(self):
+        source_dir = self.source_selector.get().strip()
+        if not source_dir:
+            self.log_viewer.append("请选择源文件夹")
+            return
+
+        try:
+            threshold = float(self.threshold_var.get().strip())
+            if threshold < 0:
+                self.log_viewer.append("重叠面积阈值不能小于 0")
+                return
+        except ValueError:
+            self.log_viewer.append("重叠面积阈值必须是有效数字")
+            return
+
+        output_dir = self.output_var.get().strip()
+        if not output_dir:
+            output_dir = self._get_default_output_dir(source_dir)
+            self.output_var.set(output_dir)
+
+        self.btn_run.configure(state="disabled", text="检查中...")
+        self.btn_open_folder.configure(state="disabled")
+        self.log_viewer.clear()
+        self.log_viewer.append(f"开始检查文件夹: {source_dir}")
+        self.log_viewer.append(f"输出目录: {output_dir}")
+        self.log_viewer.append(f"重叠面积阈值: {threshold}")
+
+        start_time = time.time()
+
+        def run_task():
+            result_path, error, stats = run_polygon_overlap_check(source_dir, threshold, output_dir)
+            elapsed = time.time() - start_time
+            self.after(0, lambda: self._on_complete(result_path, error, stats, elapsed))
+
+        thread = threading.Thread(target=run_task, daemon=True)
+        thread.start()
+
+    def _on_complete(self, result_path, error, stats, elapsed):
+        self.btn_run.configure(state="normal", text="开始检查")
+
+        if error:
+            self.log_viewer.append(f"错误: {error}")
+            return
+
+        self.result_path = result_path
+        self.log_viewer.append(f"检查完成! 用时: {elapsed:.2f}秒")
+        self.log_viewer.append(f"JSON 总数: {stats['total_files']}")
+        self.log_viewer.append(f"实际检查: {stats['checked_files']}")
+        self.log_viewer.append(f"读取跳过: {stats['skipped_files']}")
+        self.log_viewer.append(f"问题文件: {stats['error_files']}")
+        self.log_viewer.append(f"问题 shape 总数: {stats['total_overlap_shapes']}")
+        self.log_viewer.append(f"重叠 pair 总数: {stats['total_overlap_pairs']}")
+        self.log_viewer.append(f"结果目录: {result_path}")
+        if stats.get("report_path"):
+            self.log_viewer.append(f"检查报告: {stats['report_path']}")
+
+        if stats["details"]:
+            self.log_viewer.append("--- 问题文件详情（最多显示 10 条）---")
+            shown_count = 0
+            for detail in stats["details"]:
+                if detail["overlap_shape_count"] <= 0:
+                    continue
+                shown_count += 1
+                self.log_viewer.append(
+                    f"[{shown_count}] {detail['file']} | shape {detail['overlap_shape_count']} 个 | pair {detail['overlap_pair_count']} 组"
+                )
+                if detail.get("overlap_pairs_text"):
+                    self.log_viewer.append(f"    重叠情况: {detail['overlap_pairs_text']}")
+                if detail["warning"]:
+                    self.log_viewer.append(f"    提示: {detail['warning']}")
+                if shown_count >= 10:
+                    break
+
+            unread_count = max(stats["error_files"] - shown_count, 0)
+            if unread_count > 0:
+                self.log_viewer.append(f"... 还有 {unread_count} 个问题文件")
+
+        warning_details = [detail for detail in stats["details"] if detail["warning"] and detail["overlap_shape_count"] == 0]
+        if warning_details:
+            self.log_viewer.append("--- 跳过文件提示（最多显示 5 条）---")
+            for index, detail in enumerate(warning_details[:5], 1):
+                self.log_viewer.append(f"[{index}] {detail['file']} | {detail['warning']}")
+
+        self.btn_open_folder.configure(state="normal")
+
+    def _clear_input(self):
+        self.source_selector.set("")
+        self.output_var.set("")
+        self.threshold_var.set("0.1")
+        self.result_path = None
+        self.log_viewer.clear()
+        self.btn_open_folder.configure(state="disabled")
+
+    def _open_result_folder(self):
+        if self.result_path and os.path.exists(self.result_path):
+            import platform
+            if platform.system() == "Windows":
+                os.startfile(self.result_path)
+            else:
+                import subprocess
+                subprocess.run(["open", self.result_path])
+
+
 class SamplerPanel(ctk.CTkFrame):
     """检查抽样工具面板"""
 
@@ -1112,7 +1371,7 @@ class MainWindow(ctk.CTk):
         elif tool_id == "label_validator":
             self._show_panel(LabelValidatorPanel)
         elif tool_id == "polygon_checker":
-            self._show_placeholder("多边形重叠检查")
+            self._show_panel(PolygonOverlapPanel)
         elif tool_id == "sampler":
             self._show_panel(SamplerPanel)
     
