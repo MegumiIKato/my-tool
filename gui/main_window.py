@@ -40,6 +40,64 @@ HELP_TEXTS = {
 }
 
 
+def create_modal_window(owner, title: str, width: int, height: int) -> ctk.CTkToplevel:
+    """创建绑定到主窗口的模态弹窗，并居中显示。"""
+    parent_window = owner.winfo_toplevel()
+
+    window = ctk.CTkToplevel(parent_window)
+    window.title(title)
+    window.geometry(f"{width}x{height}")
+    window.resizable(False, False)
+    window.configure(fg_color=COLOR_BG_MAIN)
+    window.transient(parent_window)
+    window.grab_set()
+    window.lift()
+
+    parent_window.update_idletasks()
+    parent_x = parent_window.winfo_rootx()
+    parent_y = parent_window.winfo_rooty()
+    parent_width = parent_window.winfo_width()
+    parent_height = parent_window.winfo_height()
+
+    pos_x = parent_x + max((parent_width - width) // 2, 0)
+    pos_y = parent_y + max((parent_height - height) // 2, 0)
+    window.geometry(f"{width}x{height}+{pos_x}+{pos_y}")
+    window.focus()
+    return window
+
+
+def create_modal_header(window, title: str, description: str | None = None) -> ctk.CTkFrame:
+    """创建统一风格的弹窗头部。"""
+    header = ctk.CTkFrame(
+        window,
+        fg_color=COLOR_BG_CARD,
+        corner_radius=12,
+        border_width=1,
+        border_color=COLOR_BORDER,
+    )
+    header.pack(fill="x", padx=20, pady=(20, 12))
+
+    ctk.CTkLabel(
+        header,
+        text=title,
+        font=APP_FONT_BOLD,
+        text_color=COLOR_TEXT_PRIMARY,
+    ).pack(anchor="w", padx=18, pady=(16, 6))
+
+    if description:
+        ctk.CTkLabel(
+            header,
+            text=description,
+            font=APP_FONT,
+            text_color=COLOR_TEXT_SECONDARY,
+            justify="left",
+            anchor="w",
+            wraplength=480,
+        ).pack(fill="x", padx=18, pady=(0, 16))
+
+    return header
+
+
 class ToolHelpCard(ctk.CTkFrame):
     """工具帮助说明卡片。"""
 
@@ -352,17 +410,14 @@ class OrphanCleanerPanel(ctk.CTkFrame):
         mode_text = "孤立图片" if mode == 'image' else "孤立JSON"
         confirm_text = f"确定要删除 {orphan_count} 个{mode_text}吗？\n\n此操作不可恢复！"
 
-        confirm_window = ctk.CTkToplevel(self)
-        confirm_window.title("确认清理")
-        confirm_window.geometry("400x180")
-        confirm_window.transient(self)
-        confirm_window.grab_set()
+        confirm_window = create_modal_window(self, "确认清理", 400, 180)
+        create_modal_header(confirm_window, "确认清理", "请再次确认本次删除操作，删除后无法恢复。")
 
         ctk.CTkLabel(
             confirm_window, text=confirm_text,
             font=APP_FONT, text_color=COLOR_TEXT_PRIMARY,
             wraplength=350
-        ).pack(pady=(30, 20))
+        ).pack(padx=24, pady=(6, 20))
 
         btn_frame = ctk.CTkFrame(confirm_window, fg_color="transparent")
         btn_frame.pack(pady=(0, 20))
@@ -617,14 +672,18 @@ class LabelValidatorPanel(ctk.CTkFrame):
             "第一列列名必须为 'label'，后续行填写标签值"
         )
         
-        help_window = ctk.CTkToplevel(self)
-        help_window.title("字典文件格式说明")
-        help_window.geometry("500x450")
-        help_window.transient(self)
-        help_window.grab_set()
+        help_window = create_modal_window(self, "字典文件格式说明", 620, 540)
+        create_modal_header(help_window, "字典文件格式说明", "支持 CSV、TXT、XLSX、XLS。请按下面示例准备第一列或每行的标签值。")
         
-        textbox = ctk.CTkTextbox(help_window, font=("Courier New", 11))
-        textbox.pack(fill="both", expand=True, padx=20, pady=20)
+        textbox = ctk.CTkTextbox(
+            help_window,
+            font=APP_FONT,
+            text_color=COLOR_TEXT_PRIMARY,
+            fg_color=COLOR_BG_INPUT,
+            border_width=1,
+            border_color=COLOR_BORDER,
+        )
+        textbox.pack(fill="both", expand=True, padx=20, pady=(0, 20))
         textbox.insert("1.0", help_text)
         textbox.configure(state="disabled")
 
