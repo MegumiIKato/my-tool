@@ -14,10 +14,33 @@
 """
 
 import os
+from pathlib import Path
+
 from core.file_scanner import (
-    IMAGE_EXTENSIONS, get_leaf_folders, 
+    IMAGE_EXTENSIONS,
     find_all_orphans, scan_all_leaf_dirs
 )
+
+
+def _cleanup_affected_empty_dirs(target_dir: str, files_to_delete: list[str]) -> None:
+    """只清理本次删除影响到的空目录链。"""
+    target_path = Path(target_dir).resolve()
+    candidate_dirs = {Path(file_path).resolve().parent for file_path in files_to_delete}
+
+    for directory in sorted(candidate_dirs, key=lambda item: len(item.parts), reverse=True):
+        current_dir = directory
+        while current_dir != target_path:
+            try:
+                current_dir.relative_to(target_path)
+            except ValueError:
+                break
+
+            try:
+                current_dir.rmdir()
+            except OSError:
+                break
+
+            current_dir = current_dir.parent
 
 
 def run_scan(target_dir: str) -> tuple[dict | None, str | None]:
@@ -62,24 +85,22 @@ def run_clean(target_dir: str, mode: str) -> tuple[dict | None, str | None]:
         files_to_delete = orphan_result['orphan_json_paths']
     
     deleted_count = 0
+    failed_files = []
     for file_path in files_to_delete:
         try:
             os.remove(file_path)
             deleted_count += 1
-        except Exception:
-            pass
-    
-    for root_dir, dirs, files in os.walk(target_dir, topdown=False):
-        if root_dir == target_dir:
-            continue
-        try:
-            if not os.listdir(root_dir):
-                os.rmdir(root_dir)
-        except Exception:
-            pass
+        except Exception as exc:
+            failed_files.append({
+                'path': file_path,
+                'reason': str(exc),
+            })
+
+    _cleanup_affected_empty_dirs(target_dir, files_to_delete)
     
     stats = scan_all_leaf_dirs(target_dir)
     stats['deleted'] = deleted_count
+    stats['failed'] = failed_files
     
     return stats, None
 

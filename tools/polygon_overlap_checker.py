@@ -42,10 +42,14 @@ def _iter_json_files(source_dir: Path, output_dir: Path) -> list[Path]:
 
 def _find_image_for_json(json_path: Path) -> Path | None:
     """查找与 JSON 同名的图片文件。"""
-    for ext in IMAGE_EXTENSIONS:
-        image_path = json_path.with_suffix(ext)
-        if image_path.exists():
-            return image_path
+    json_stem = json_path.stem.lower()
+    for child in json_path.parent.iterdir():
+        if not child.is_file():
+            continue
+        if child.stem.lower() != json_stem:
+            continue
+        if child.suffix.lower() in IMAGE_EXTENSIONS:
+            return child
     return None
 
 
@@ -257,13 +261,13 @@ def run_polygon_overlap_check(
     else:
         output_path = source_path / DEFAULT_OUTPUT_DIR_NAME
 
-    output_path.mkdir(parents=True, exist_ok=True)
-
     all_json_files = _iter_json_files(source_path, output_path)
     empty_stats["total_files"] = len(all_json_files)
 
     if not all_json_files:
         return None, "源文件夹内未找到 JSON 文件", empty_stats
+
+    output_path.mkdir(parents=True, exist_ok=True)
 
     stats = {
         "total_files": len(all_json_files),
@@ -295,6 +299,15 @@ def run_polygon_overlap_check(
         stats["checked_files"] += 1
 
         if not modified_data:
+            if detail["warning"]:
+                stats["details"].append({
+                    "file": relative_path,
+                    "overlap_shape_count": 0,
+                    "overlap_pair_count": 0,
+                    "overlap_pairs_text": "",
+                    "image_found": False,
+                    "warning": detail["warning"],
+                })
             continue
 
         target_json_path = output_path / relative_path

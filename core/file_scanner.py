@@ -12,6 +12,35 @@ from typing import Generator
 IMAGE_EXTENSIONS = ('.jpg', '.jpeg', '.png', '.tif', '.tiff')
 
 
+def _should_exclude_path(path: Path, exclude_dirs: list[str] | None) -> bool:
+    """判断路径是否应被排除。
+
+    支持传入目录名、相对路径或绝对路径。
+    """
+    if not exclude_dirs:
+        return False
+
+    path_parts = set(path.parts)
+    resolved_path = path.resolve()
+
+    for exclude in exclude_dirs:
+        if not exclude:
+            continue
+
+        exclude_path = Path(exclude)
+        exclude_name = exclude_path.name
+        if exclude_name and exclude_name in path_parts:
+            return True
+
+        try:
+            resolved_path.relative_to(exclude_path.resolve())
+            return True
+        except Exception:
+            continue
+
+    return False
+
+
 def is_image_file(filename: str) -> bool:
     """判断是否为图片文件"""
     _, ext = os.path.splitext(filename)
@@ -265,7 +294,7 @@ def scan_json_files(root_path: str, exclude_dirs: list[str] = None) -> Generator
     
     root = Path(root_path)
     for json_file in root.rglob("*.json"):
-        if any(exclude in json_file.parts for exclude in exclude_dirs):
+        if _should_exclude_path(json_file, exclude_dirs):
             continue
         yield json_file
 
@@ -282,23 +311,23 @@ def scan_image_json_pairs(root_path: str, exclude_dirs: list[str] = None) -> dic
     """
     if exclude_dirs is None:
         exclude_dirs = []
-    
+
     folder_map = {}
     
     for root, dirs, files in os.walk(root_path):
-        if any(ex in root for ex in exclude_dirs):
+        root_path_current = Path(root)
+        dirs[:] = [d for d in dirs if not _should_exclude_path(root_path_current / d, exclude_dirs)]
+
+        if _should_exclude_path(root_path_current, exclude_dirs):
             continue
             
         json_files = [f for f in files if f.lower().endswith('.json')]
         pairs = []
+        file_lookup = {Path(file_name).stem.lower(): file_name for file_name in files if is_image_file(file_name)}
         
         for jf in json_files:
             base_name = os.path.splitext(jf)[0]
-            img_name = None
-            for ext in IMAGE_EXTENSIONS:
-                if base_name + ext in files or base_name + ext.upper() in files:
-                    img_name = base_name + ext if base_name + ext in files else base_name + ext.upper()
-                    break
+            img_name = file_lookup.get(base_name.lower())
             
             if img_name:
                 pairs.append((img_name, jf))

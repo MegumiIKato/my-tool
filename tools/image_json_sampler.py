@@ -18,6 +18,8 @@ import random
 import shutil
 from pathlib import Path
 
+from core.file_scanner import IMAGE_EXTENSIONS, scan_image_json_pairs
+
 
 def get_image_json_pairs(root_path: str) -> dict[str, list[tuple[str, str]]]:
     """递归获取所有图片及其对应的json文件对
@@ -28,30 +30,8 @@ def get_image_json_pairs(root_path: str) -> dict[str, list[tuple[str, str]]]:
     返回:
         文件夹路径到 (图片名, json名) 列表的映射
     """
-    valid_extensions = ('.jpg', '.JPG', '.jpeg', '.JPEG', '.png', '.PNG')
-    folder_map = {}
-
-    for root, dirs, files in os.walk(root_path):
-        if "照片检查+" in root or "抽样结果" in root:
-            continue
-
-        json_files = [f for f in files if f.lower().endswith('.json')]
-        pairs = []
-        for jf in json_files:
-            base_name = os.path.splitext(jf)[0]
-            img_name = None
-            for ext in valid_extensions:
-                if base_name + ext in files:
-                    img_name = base_name + ext
-                    break
-
-            if img_name:
-                pairs.append((img_name, jf))
-
-        if pairs:
-            folder_map[root] = pairs
-
-    return folder_map
+    exclude_dirs = ["照片检查+", "抽样结果", "ERROR_CHECK_RESULTS"]
+    return scan_image_json_pairs(root_path, exclude_dirs=exclude_dirs)
 
 
 def dispersed_sample(folder_map: dict, target_count: int) -> list[tuple[str, tuple[str, str]]]:
@@ -106,23 +86,36 @@ def run_sampler(source_dir: str, output_dir: str, sample_count: int = 50) -> tup
     if not os.path.isdir(source_dir):
         return None, "源文件夹不存在或不是有效目录", {}
 
-    folder_map = get_image_json_pairs(source_dir)
+    output_path = Path(output_dir).resolve()
+    source_path = Path(source_dir).resolve()
+
+    exclude_dirs = [str(output_path), "照片检查+", "抽样结果", "ERROR_CHECK_RESULTS"]
+    folder_map = scan_image_json_pairs(source_dir, exclude_dirs=exclude_dirs)
     total_found = sum(len(v) for v in folder_map.values())
 
     if total_found == 0:
         return None, "源文件夹内未找到有效的图片和同名JSON对", {}
 
-    if not os.path.exists(output_dir):
-        os.makedirs(output_dir)
+    output_path.mkdir(parents=True, exist_ok=True)
 
     sampled_list = dispersed_sample(folder_map, sample_count)
     total_labels = 0
+    copied_count = 0
 
     for root_path, (img_name, json_name) in sampled_list:
-        shutil.copy2(os.path.join(root_path, img_name), os.path.join(output_dir, img_name))
-        json_src = os.path.join(root_path, json_name)
-        json_dst = os.path.join(output_dir, json_name)
+        source_folder = Path(root_path).resolve()
+        relative_folder = source_folder.relative_to(source_path)
+        target_folder = output_path / relative_folder
+        target_folder.mkdir(parents=True, exist_ok=True)
+
+        image_src = source_folder / img_name
+        image_dst = target_folder / img_name
+        json_src = source_folder / json_name
+        json_dst = target_folder / json_name
+
+        shutil.copy2(image_src, image_dst)
         shutil.copy2(json_src, json_dst)
+        copied_count += 1
 
         try:
             with open(json_dst, 'r', encoding='utf-8') as f:
@@ -132,12 +125,13 @@ def run_sampler(source_dir: str, output_dir: str, sample_count: int = 50) -> tup
             pass
 
     stats = {
-        'sampled': len(sampled_list),
+        'sampled': copied_count,
         'labels': total_labels,
-        'total_found': total_found
+        'total_found': total_found,
+        'supported_formats': list(IMAGE_EXTENSIONS),
     }
 
-    return output_dir, None, stats
+    return str(output_path), None, stats
 
 
 def get_default_output_dir(source_dir: str) -> str:

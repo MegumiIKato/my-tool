@@ -15,8 +15,9 @@
 import os
 import json
 import csv
-from pathlib import Path
 from openpyxl import Workbook
+
+from core.file_scanner import scan_json_files
 
 
 def load_label_dict(file_path: str) -> tuple[set[str] | None, str | None]:
@@ -123,17 +124,15 @@ def run_validator(target_dir: str, dict_path: str) -> tuple[str | None, str | No
     if load_error:
         return None, load_error, {}
     
-    all_json_files = []
-    for root, dirs, files in os.walk(target_dir):
-        for file in files:
-            if file.lower().endswith('.json'):
-                all_json_files.append(os.path.join(root, file))
-    
+    exclude_dirs = ["ERROR_CHECK_RESULTS", "抽样结果", "照片检查+"]
+    all_json_files = list(scan_json_files(target_dir, exclude_dirs=exclude_dirs))
+
     total_files = len(all_json_files)
     if total_files == 0:
         return None, "目标文件夹内未找到 JSON 文件", {}
-    
+
     error_list = []
+    error_files = set()
     
     for file_path in all_json_files:
         try:
@@ -150,10 +149,12 @@ def run_validator(target_dir: str, dict_path: str) -> tuple[str | None, str | No
                 for err_lab in file_errors:
                     rel_path = os.path.relpath(file_path, target_dir)
                     error_list.append([rel_path, err_lab, "不在字典中"])
+                    error_files.add(rel_path)
                     
         except Exception as e:
             rel_path = os.path.relpath(file_path, target_dir)
             error_list.append([rel_path, "", f"文件读取失败: {str(e)}"])
+            error_files.add(rel_path)
     
     wb = Workbook()
     ws = wb.active
@@ -171,8 +172,9 @@ def run_validator(target_dir: str, dict_path: str) -> tuple[str | None, str | No
     
     stats = {
         'total_files': total_files,
-        'error_count': len(error_list),
-        'valid_count': total_files - len(error_list) if error_list else total_files
+        'error_count': len(error_files),
+        'error_item_count': len(error_list),
+        'valid_count': total_files - len(error_files)
     }
     
     return output_path, None, stats

@@ -11,6 +11,102 @@ from tools.orphan_image_cleaner import run_scan, run_clean
 from tools.polygon_overlap_checker import run_polygon_overlap_check
 
 
+HELP_TEXTS = {
+    "image_count": [
+        "选择扫描文件夹后点击“开始扫描”，结果会导出为 Excel。",
+        "只在叶子文件夹内配对，支持 jpg、jpeg、png、tif、tiff。",
+        "结果文件保存在源目录，文件名为 image_count_result.xlsx。",
+    ],
+    "orphan_cleaner": [
+        "先扫描查看统计结果，再按需要选择删除孤立图片或孤立 JSON。",
+        "同名多格式图片加 JSON 会视为特殊配对，不会自动删除。",
+        "删除操作不可恢复，建议先确认扫描结果。",
+    ],
+    "label_validator": [
+        "先选择待检查文件夹，再上传字典文件后开始检查。",
+        "字典支持 csv、txt、xlsx、xls；表头第一列需为 label。",
+        "检查报告保存在源目录，文件名为 label_check_report.xlsx。",
+    ],
+    "polygon_checker": [
+        "选择源文件夹，可设置阈值和输出目录，然后开始检查。",
+        "只检查 polygon，原始文件不会被修改，问题副本会单独导出。",
+        "默认生成 ERROR_CHECK_RESULTS 目录，并输出 polygon_overlap_report.xlsx 报告。",
+    ],
+    "sampler": [
+        "选择源文件夹，设置抽样数量和输出目录后开始抽样。",
+        "若不填写输出目录，会在源目录下自动创建抽样结果文件夹。",
+        "会复制抽中的图片与 JSON，并统计 shapes 总数。",
+    ],
+}
+
+
+class ToolHelpCard(ctk.CTkFrame):
+    """工具帮助说明卡片。"""
+
+    EXPAND_ARROW = "◀"
+    COLLAPSE_ARROW = "▼"
+
+    def __init__(self, master, lines: list[str], **kwargs):
+        super().__init__(master, fg_color=COLOR_BG_CARD, corner_radius=12, **kwargs)
+
+        self.lines = lines
+        self.expanded = False
+
+        self.header_frame = ctk.CTkFrame(self, fg_color="transparent")
+        self.header_frame.pack(fill="x", padx=15, pady=(10, 8))
+
+        self.title_label = ctk.CTkLabel(
+            self.header_frame,
+            text="帮助说明",
+            font=APP_FONT,
+            text_color=COLOR_TEXT_PRIMARY,
+        )
+        self.title_label.pack(side="left")
+
+        self.arrow_label = ctk.CTkLabel(
+            self.header_frame,
+            text=self.EXPAND_ARROW,
+            font=APP_FONT_BOLD,
+            text_color=COLOR_TEXT_MUTED,
+        )
+        self.arrow_label.pack(side="right")
+
+        self.content_frame = ctk.CTkFrame(self, fg_color="transparent")
+        self.content_labels = []
+
+        self._bind_toggle_events()
+
+        for line in lines:
+            item_label = ctk.CTkLabel(
+                self.content_frame,
+                text=line,
+                font=APP_FONT_SMALL,
+                text_color=COLOR_TEXT_SECONDARY,
+                justify="left",
+                anchor="w",
+                wraplength=760,
+            )
+            self.content_labels.append(item_label)
+
+    def _bind_toggle_events(self):
+        self.header_frame.bind("<Button-1>", self._toggle)
+        self.title_label.bind("<Button-1>", self._toggle)
+        self.arrow_label.bind("<Button-1>", self._toggle)
+
+    def _toggle(self, _event=None):
+        if self.expanded:
+            self.content_frame.pack_forget()
+            self.arrow_label.configure(text=self.EXPAND_ARROW)
+            self.expanded = False
+            return
+
+        self.content_frame.pack(fill="x", padx=15, pady=(0, 10))
+        self.arrow_label.configure(text=self.COLLAPSE_ARROW)
+        for item_label in self.content_labels:
+            item_label.pack(fill="x", anchor="w", pady=(0, 6))
+        self.expanded = True
+
+
 class OrphanCleanerPanel(ctk.CTkFrame):
     """孤立文件清理工具面板"""
 
@@ -33,6 +129,9 @@ class OrphanCleanerPanel(ctk.CTkFrame):
         )
         self.desc_label.pack(anchor="w", pady=(0, 20), padx=20)
 
+        self.help_card = ToolHelpCard(self, lines=HELP_TEXTS["orphan_cleaner"])
+        self.help_card.pack(fill="x", padx=20, pady=(0, 15))
+
         self.params_card = ctk.CTkFrame(self, fg_color=COLOR_BG_CARD, corner_radius=12)
         self.params_card.pack(fill="x", padx=20, pady=(0, 15))
 
@@ -50,14 +149,16 @@ class OrphanCleanerPanel(ctk.CTkFrame):
         self.radio_image = ctk.CTkRadioButton(
             self.mode_frame, text="删除孤立图片",
             variable=self.mode_var, value="image",
-            font=APP_FONT, fg_color=COLOR_PRIMARY
+            font=APP_FONT, fg_color=COLOR_PRIMARY,
+            command=self._refresh_clean_button_state
         )
         self.radio_image.pack(side="left", padx=(0, 15))
 
         self.radio_json = ctk.CTkRadioButton(
             self.mode_frame, text="删除孤立JSON",
             variable=self.mode_var, value="json",
-            font=APP_FONT, fg_color=COLOR_PRIMARY
+            font=APP_FONT, fg_color=COLOR_PRIMARY,
+            command=self._refresh_clean_button_state
         )
         self.radio_json.pack(side="left")
 
@@ -180,7 +281,10 @@ class OrphanCleanerPanel(ctk.CTkFrame):
         start_time = time.time()
 
         def run_task():
-            stats, error = run_scan(target_dir)
+            try:
+                stats, error = run_scan(target_dir)
+            except Exception as exc:
+                stats, error = None, f"执行扫描失败: {str(exc)}"
             elapsed = time.time() - start_time
             self.after(0, lambda: self._on_scan_complete(stats, error, elapsed))
 
@@ -217,13 +321,16 @@ class OrphanCleanerPanel(ctk.CTkFrame):
             if special_count > 10:
                 self.log_viewer.append(f"... 还有 {special_count - 10} 组")
 
-        mode = self.mode_var.get()
-        if mode == 'image' and stats['orphan_image'] > 0:
-            self.btn_clean.configure(state="normal")
-        elif mode == 'json' and stats['orphan_json'] > 0:
-            self.btn_clean.configure(state="normal")
-        else:
+        self._refresh_clean_button_state()
+
+    def _refresh_clean_button_state(self):
+        if not self.scan_stats:
             self.btn_clean.configure(state="disabled")
+            return
+
+        mode = self.mode_var.get()
+        orphan_count = self.scan_stats['orphan_image'] if mode == 'image' else self.scan_stats['orphan_json']
+        self.btn_clean.configure(state="normal" if orphan_count > 0 else "disabled")
 
     def _run_clean(self):
         target_dir = self.folder_selector.get()
@@ -291,7 +398,10 @@ class OrphanCleanerPanel(ctk.CTkFrame):
         start_time = time.time()
 
         def run_task():
-            stats, error = run_clean(target_dir, mode)
+            try:
+                stats, error = run_clean(target_dir, mode)
+            except Exception as exc:
+                stats, error = None, f"执行清理失败: {str(exc)}"
             elapsed = time.time() - start_time
             self.after(0, lambda: self._on_clean_complete(stats, error, elapsed, mode_text))
 
@@ -307,6 +417,13 @@ class OrphanCleanerPanel(ctk.CTkFrame):
 
         self.log_viewer.append(f"清理完成! 用时: {elapsed:.2f}秒")
         self.log_viewer.append(f"已删除{mode_text}: {stats['deleted']} 个")
+        failed_files = stats.get('failed', [])
+        if failed_files:
+            self.log_viewer.append(f"删除失败: {len(failed_files)} 个")
+            for item in failed_files[:5]:
+                self.log_viewer.append(f"失败文件: {item['path']} | {item['reason']}")
+            if len(failed_files) > 5:
+                self.log_viewer.append(f"... 还有 {len(failed_files) - 5} 个删除失败")
         self.log_viewer.append(f"剩余有效配对: {stats['paired']} 对")
 
         special_count = len(stats.get('special_pairs', []))
@@ -320,7 +437,7 @@ class OrphanCleanerPanel(ctk.CTkFrame):
             self.log_viewer.append(f"注意: 存在 {special_count} 组特殊配对文件，请手动检查处理")
 
         self.scan_stats = stats
-        self.btn_clean.configure(state="disabled")
+        self._refresh_clean_button_state()
 
     def _clear_input(self):
         self.folder_selector.set("")
@@ -332,7 +449,7 @@ class OrphanCleanerPanel(ctk.CTkFrame):
         self.lbl_orphan_json.configure(text="孤立JSON: 0 个")
         self.lbl_special.configure(text="特殊配对: 0 组")
         self.lbl_folder.configure(text="扫描文件夹: 0 个")
-        self.btn_clean.configure(state="disabled")
+        self._refresh_clean_button_state()
 
 
 class LabelValidatorPanel(ctk.CTkFrame):
@@ -356,6 +473,9 @@ class LabelValidatorPanel(ctk.CTkFrame):
             font=APP_FONT, text_color=COLOR_TEXT_SECONDARY
         )
         self.desc_label.pack(anchor="w", pady=(0, 20), padx=20)
+
+        self.help_card = ToolHelpCard(self, lines=HELP_TEXTS["label_validator"])
+        self.help_card.pack(fill="x", padx=20, pady=(0, 15))
 
         self.params_card = ctk.CTkFrame(self, fg_color=COLOR_BG_CARD, corner_radius=12)
         self.params_card.pack(fill="x", padx=20, pady=(0, 15))
@@ -535,6 +655,8 @@ class LabelValidatorPanel(ctk.CTkFrame):
             return
         
         self.btn_run.configure(state="disabled", text="检查中...")
+        self.result_path = None
+        self.btn_open_folder.configure(state="disabled")
         self.log_viewer.clear()
         self.log_viewer.append(f"开始检查文件夹: {target_dir}")
         self.log_viewer.append(f"使用字典: {dict_path}")
@@ -542,7 +664,10 @@ class LabelValidatorPanel(ctk.CTkFrame):
         start_time = time.time()
         
         def run_task():
-            output_path, error, stats = run_validator(target_dir, dict_path)
+            try:
+                output_path, error, stats = run_validator(target_dir, dict_path)
+            except Exception as exc:
+                output_path, error, stats = None, f"执行检查失败: {str(exc)}", {}
             elapsed = time.time() - start_time
             self.after(0, lambda: self._on_complete(output_path, error, stats, elapsed))
         
@@ -561,6 +686,8 @@ class LabelValidatorPanel(ctk.CTkFrame):
         self.log_viewer.append(f"总文件数: {stats['total_files']}")
         self.log_viewer.append(f"有效文件: {stats['valid_count']}")
         self.log_viewer.append(f"存在问题: {stats['error_count']}")
+        if 'error_item_count' in stats:
+            self.log_viewer.append(f"问题条目: {stats['error_item_count']}")
         self.log_viewer.append(f"报告已保存: {output_path}")
         self.btn_open_folder.configure(state="normal")
 
@@ -605,6 +732,9 @@ class PolygonOverlapPanel(ctk.CTkFrame):
             font=APP_FONT, text_color=COLOR_TEXT_SECONDARY
         )
         self.desc_label.pack(anchor="w", pady=(0, 20), padx=20)
+
+        self.help_card = ToolHelpCard(self, lines=HELP_TEXTS["polygon_checker"])
+        self.help_card.pack(fill="x", padx=20, pady=(0, 15))
 
         self.params_card = ctk.CTkFrame(self, fg_color=COLOR_BG_CARD, corner_radius=12)
         self.params_card.pack(fill="x", padx=20, pady=(0, 15))
@@ -760,6 +890,7 @@ class PolygonOverlapPanel(ctk.CTkFrame):
 
         self.btn_run.configure(state="disabled", text="检查中...")
         self.btn_open_folder.configure(state="disabled")
+        self.result_path = None
         self.log_viewer.clear()
         self.log_viewer.append(f"开始检查文件夹: {source_dir}")
         self.log_viewer.append(f"输出目录: {output_dir}")
@@ -768,7 +899,10 @@ class PolygonOverlapPanel(ctk.CTkFrame):
         start_time = time.time()
 
         def run_task():
-            result_path, error, stats = run_polygon_overlap_check(source_dir, threshold, output_dir)
+            try:
+                result_path, error, stats = run_polygon_overlap_check(source_dir, threshold, output_dir)
+            except Exception as exc:
+                result_path, error, stats = None, f"执行检查失败: {str(exc)}", {}
             elapsed = time.time() - start_time
             self.after(0, lambda: self._on_complete(result_path, error, stats, elapsed))
 
@@ -862,6 +996,9 @@ class SamplerPanel(ctk.CTkFrame):
             font=APP_FONT, text_color=COLOR_TEXT_SECONDARY
         )
         self.desc_label.pack(anchor="w", pady=(0, 20), padx=20)
+
+        self.help_card = ToolHelpCard(self, lines=HELP_TEXTS["sampler"])
+        self.help_card.pack(fill="x", padx=20, pady=(0, 15))
 
         self.params_card = ctk.CTkFrame(self, fg_color=COLOR_BG_CARD, corner_radius=12)
         self.params_card.pack(fill="x", padx=20, pady=(0, 15))
@@ -1007,6 +1144,8 @@ class SamplerPanel(ctk.CTkFrame):
             return
 
         self.btn_run.configure(state="disabled", text="抽样中...")
+        self.result_path = None
+        self.btn_open_folder.configure(state="disabled")
         self.log_viewer.clear()
         self.log_viewer.append(f"开始扫描文件夹: {source_dir}")
         self.log_viewer.append(f"输出目录: {output_dir}")
@@ -1015,7 +1154,10 @@ class SamplerPanel(ctk.CTkFrame):
         start_time = time.time()
 
         def run_task():
-            output_path, error, stats = run_sampler(source_dir, output_dir, sample_count)
+            try:
+                output_path, error, stats = run_sampler(source_dir, output_dir, sample_count)
+            except Exception as exc:
+                output_path, error, stats = None, f"执行抽样失败: {str(exc)}", {}
             elapsed = time.time() - start_time
             self.after(0, lambda: self._on_sampler_complete(output_path, error, stats, elapsed))
 
@@ -1076,7 +1218,10 @@ class ImageCountPanel(ctk.CTkFrame):
             font=APP_FONT, text_color=COLOR_TEXT_SECONDARY
         )
         self.desc_label.pack(anchor="w", pady=(0, 20), padx=20)
-        
+
+        self.help_card = ToolHelpCard(self, lines=HELP_TEXTS["image_count"])
+        self.help_card.pack(fill="x", padx=20, pady=(0, 15))
+
         self.params_card = ctk.CTkFrame(self, fg_color=COLOR_BG_CARD, corner_radius=12)
         self.params_card.pack(fill="x", padx=20, pady=(0, 15))
         
@@ -1144,6 +1289,8 @@ class ImageCountPanel(ctk.CTkFrame):
             return
         
         self.btn_run.configure(state="disabled", text="扫描中...")
+        self.result_path = None
+        self.btn_open_folder.configure(state="disabled")
         self.log_viewer.clear()
         self.log_viewer.append(f"开始扫描文件夹: {folder}")
         self.log_viewer.append("自动识别: jpg, jpeg, png, tif, tiff")
@@ -1151,7 +1298,10 @@ class ImageCountPanel(ctk.CTkFrame):
         start_time = time.time()
         
         def run_task():
-            output_path, error, stats = run_count(folder)
+            try:
+                output_path, error, stats = run_count(folder)
+            except Exception as exc:
+                output_path, error, stats = None, f"执行扫描失败: {str(exc)}", {}
             elapsed = time.time() - start_time
             self.after(0, lambda: self._on_scan_complete(output_path, error, stats, elapsed))
         
@@ -1291,14 +1441,19 @@ class MainWindow(ctk.CTk):
             font=APP_FONT_HEADER, text_color=COLOR_PRIMARY
         )
         self.logo_label.pack(anchor="w", padx=20, pady=(20, 8))
+        self.logo_label.bind("<Button-1>", self._on_logo_clicked)
         
         self.separator = ctk.CTkFrame(self.sidebar, height=2, fg_color=COLOR_BORDER)
         self.separator.pack(fill="x", padx=15, pady=(0, 10))
         
         self.tool_frame = ctk.CTkFrame(self.sidebar, fg_color="transparent")
         self.tool_frame.pack(fill="both", expand=True, pady=10)
+
+        self.about_frame = ctk.CTkFrame(self.sidebar, fg_color="transparent")
+        self.about_frame.pack(fill="x", padx=0, pady=(0, 12), side="bottom")
         
         self.tool_buttons = []
+        self.tool_button_map = {}
         tools = [
             ("文件计数与匹配统计", "image_counter"),
             ("孤立文件清理", "orphan_cleaner"),
@@ -1320,6 +1475,23 @@ class MainWindow(ctk.CTk):
             )
             btn.pack(fill="x", padx=10, pady=3)
             self.tool_buttons.append(btn)
+            self.tool_button_map[tool_id] = btn
+
+        self.about_button = ctk.CTkButton(
+            self.about_frame,
+            text="关于",
+            font=APP_FONT,
+            height=45,
+            fg_color="transparent",
+            text_color=COLOR_TEXT_PRIMARY,
+            hover_color=COLOR_SIDEBAR_SELECTED,
+            anchor="w",
+            border_width=0,
+            command=lambda: self._on_tool_selected("about"),
+        )
+        self.about_button.pack(fill="x", padx=10, pady=3)
+        self.tool_buttons.append(self.about_button)
+        self.tool_button_map["about"] = self.about_button
     
     def _create_main_area(self):
         self.main_area = ctk.CTkFrame(self, fg_color=COLOR_BG_MAIN)
@@ -1332,19 +1504,66 @@ class MainWindow(ctk.CTk):
     
     def _show_welcome(self):
         self._clear_main_area()
+        self._set_active_tool_button("about")
+        self.current_panel = None
         
+        self.home_frame = ctk.CTkFrame(self.main_area, fg_color="transparent")
+        self.home_frame.pack(fill="both", expand=True, padx=36, pady=32)
+
         self.content_label = ctk.CTkLabel(
-            self.main_area, text="欢迎使用 Labelme 工具箱",
+            self.home_frame, text="欢迎使用 Labelme 工具箱",
             font=APP_FONT_HEADER, text_color=COLOR_TEXT_PRIMARY
         )
-        self.content_label.pack(pady=(40, 20))
+        self.content_label.pack(anchor="w", pady=(8, 12))
         
         self.welcome_text = ctk.CTkLabel(
-            self.main_area,
-            text="请从左侧选择要使用的工具",
+            self.home_frame,
+            text="一个面向 Labelme 标注数据处理的桌面工具集，覆盖统计、清理、校验、重叠检查与抽样五类常用任务。",
             font=APP_FONT, text_color=COLOR_TEXT_SECONDARY
         )
-        self.welcome_text.pack()
+        self.welcome_text.pack(anchor="w")
+
+        self.intro_card = ctk.CTkFrame(
+            self.home_frame,
+            fg_color=COLOR_BG_CARD,
+            corner_radius=14,
+            border_width=1,
+            border_color=COLOR_BORDER,
+        )
+        self.intro_card.pack(fill="x", pady=(24, 18))
+
+        self.intro_title = ctk.CTkLabel(
+            self.intro_card,
+            text="工具集简介",
+            font=APP_FONT_BOLD,
+            text_color=COLOR_TEXT_PRIMARY,
+        )
+        self.intro_title.pack(anchor="w", padx=20, pady=(18, 10))
+
+        intro_lines = [
+            "文件计数与匹配统计：按叶子文件夹汇总图片与 JSON 配对情况，并导出结果。",
+            "孤立文件清理与标签检查：辅助发现孤立文件、异常标签，降低人工排查成本。",
+            "多边形重叠检查与抽样：定位重叠标注问题，并快速抽取样本进行人工复核。",
+        ]
+
+        for line in intro_lines:
+            item_label = ctk.CTkLabel(
+                self.intro_card,
+                text=f"• {line}",
+                font=APP_FONT,
+                text_color=COLOR_TEXT_SECONDARY,
+                justify="left",
+                anchor="w",
+            )
+            item_label.pack(fill="x", padx=20, pady=4)
+
+        self.copyright_label = ctk.CTkLabel(
+            self.home_frame,
+            text="Copyright © Shuyang Gu",
+            font=APP_FONT_SMALL,
+            text_color=COLOR_TEXT_MUTED,
+        )
+        self.copyright_label.pack(anchor="w", pady=(6, 0))
     
     def _clear_main_area(self):
         for widget in self.main_area.winfo_children():
@@ -1361,9 +1580,30 @@ class MainWindow(ctk.CTk):
             self.tool_panels[panel_class.__name__].pack(fill="both", expand=True)
         
         self.current_panel = panel_class.__name__
-    
+
+    def _reset_tool_button_state(self):
+        for btn in self.tool_buttons:
+            btn.configure(fg_color="transparent", text_color=COLOR_TEXT_PRIMARY)
+
+    def _set_active_tool_button(self, tool_id: str):
+        self._reset_tool_button_state()
+        active_button = self.tool_button_map.get(tool_id)
+        if active_button is not None:
+            active_button.configure(
+                fg_color=COLOR_SIDEBAR_SELECTED,
+                text_color=COLOR_PRIMARY,
+            )
+
+    def _on_logo_clicked(self, _event=None):
+        self._show_welcome()
+
     def _on_tool_selected(self, tool_id: str):
         """工具选择回调"""
+        if tool_id == "about":
+            self._show_welcome()
+            return
+
+        self._set_active_tool_button(tool_id)
         if tool_id == "image_counter":
             self._show_panel(ImageCountPanel)
         elif tool_id == "orphan_cleaner":
