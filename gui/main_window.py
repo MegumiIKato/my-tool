@@ -1,8 +1,12 @@
-import customtkinter as ctk
-from tkinter import filedialog
-import threading
 import os
+from pathlib import Path
+import sys
+import threading
 import time
+from tkinter import PhotoImage, filedialog
+
+import customtkinter as ctk
+
 from .theme import *
 from tools.image_count import run_count
 from tools.image_json_sampler import run_sampler, get_default_output_dir
@@ -38,6 +42,14 @@ HELP_TEXTS = {
         "会复制抽中的图片与 JSON，并统计 shapes 总数。",
     ],
 }
+
+
+def get_asset_path(filename: str) -> Path:
+    """获取图标等静态资源路径，兼容开发环境与 PyInstaller 打包环境。"""
+    if hasattr(sys, "_MEIPASS"):
+        return Path(sys._MEIPASS) / "assets" / filename
+
+    return Path(__file__).resolve().parents[1] / "assets" / filename
 
 
 def create_modal_window(owner, title: str, width: int, height: int) -> ctk.CTkToplevel:
@@ -1478,8 +1490,28 @@ class MainWindow(ctk.CTk):
         self.title("Labelme 工具箱")
         self.geometry("1000x700")
         self.minsize(900, 600)
+        self._window_icon = None
+        self._setup_window_icon()
         
         self._setup_ui()
+
+    def _setup_window_icon(self):
+        """设置窗口图标，优先加载 Windows ICO，并保留 PNG 作为回退。"""
+        ico_path = get_asset_path("app_icon.ico")
+        png_path = get_asset_path("app_icon.png")
+
+        try:
+            if ico_path.exists():
+                self.iconbitmap(default=str(ico_path))
+        except Exception:
+            pass
+
+        try:
+            if png_path.exists():
+                self._window_icon = PhotoImage(file=str(png_path))
+                self.iconphoto(True, self._window_icon)
+        except Exception:
+            pass
     
     def _setup_ui(self):
         self.grid_columnconfigure(1, weight=1)

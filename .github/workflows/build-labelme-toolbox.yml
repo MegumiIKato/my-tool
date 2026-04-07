@@ -27,7 +27,7 @@ jobs:
 
       - name: 使用 PyInstaller 打包
         run: |
-          pyinstaller --noconfirm --clean --onefile --windowed --name "LabelMe工具箱" main.py
+          pyinstaller --noconfirm --clean --onefile --windowed --name "LabelMe工具箱" --icon assets/app_icon.ico --add-data "assets;assets" main.py
 
       - name: 上传 EXE 构建产物
         uses: actions/upload-artifact@v4
