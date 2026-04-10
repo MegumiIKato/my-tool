@@ -10,5 +10,4 @@
 3. 检查类：标签正确性检查、多边形重叠检查
 4. 抽样类：检查抽样
 
-design by human
-coded by ai
+designed by human / coded by ai
