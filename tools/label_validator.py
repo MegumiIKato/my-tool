@@ -3,7 +3,7 @@
 
 功能说明：
 - 递归扫描选定目录中的所有 Labelme JSON 文件
-- 检查每个 JSON 文件中的 shapes.label 值是否在用户提供的有效标签字典中
+- 检查每个 JSON 文件中的 shapes.label 值是否在用户提供的标签列表中
 - 生成 xlsx 格式的检查报告，列出所有无效标签及其所在文件
 
 使用场景：
@@ -20,14 +20,17 @@ from openpyxl import Workbook
 from core.file_scanner import scan_json_files
 
 
+MANUAL_LABEL_SEPARATORS = (',', '，', ';', '；', '\n', '\r')
+
+
 def load_label_dict(file_path: str) -> tuple[set[str] | None, str | None]:
-    """加载标签字典文件
+    """加载标签列表文件
     
     支持格式: csv, txt, xlsx, xls
     第一列列名必须为 'label'
     
     参数:
-        file_path: 字典文件路径
+        file_path: 标签文件路径
     
     返回:
         (标签集合, 错误信息) - 成功时 error 为 None
@@ -49,8 +52,21 @@ def load_label_dict(file_path: str) -> tuple[set[str] | None, str | None]:
         return None, f"文件读取失败: {str(e)}"
     
     if not labels:
-        return None, "字典文件中未找到有效的标签值"
+        return None, "标签文件中未找到有效的标签值"
     
+    return labels, None
+
+
+def parse_manual_labels(text: str) -> tuple[set[str] | None, str | None]:
+    """解析手动输入的标签文本。"""
+    normalized_text = text
+    for separator in MANUAL_LABEL_SEPARATORS:
+        normalized_text = normalized_text.replace(separator, '\n')
+
+    labels = {item.strip() for item in normalized_text.splitlines() if item.strip()}
+    if not labels:
+        return None, "手动输入中未找到有效的标签值"
+
     return labels, None
 
 
@@ -104,12 +120,12 @@ def _load_excel(file_path: str) -> set[str]:
     return labels
 
 
-def run_validator(target_dir: str, dict_path: str) -> tuple[str | None, str | None, dict]:
+def run_validator(target_dir: str, valid_labels: set[str]) -> tuple[str | None, str | None, dict]:
     """执行标签校验逻辑
     
     参数:
         target_dir: 要检查的文件夹路径
-        dict_path: 标签字典文件路径
+        valid_labels: 有效标签集合
     
     返回:
         (output_path, error, stats)
@@ -119,12 +135,11 @@ def run_validator(target_dir: str, dict_path: str) -> tuple[str | None, str | No
     """
     if not os.path.isdir(target_dir):
         return None, "目标文件夹不存在或不是有效目录", {}
+
+    if not valid_labels:
+        return None, "标签列表不能为空", {}
     
-    valid_labels, load_error = load_label_dict(dict_path)
-    if load_error:
-        return None, load_error, {}
-    
-    exclude_dirs = ["ERROR_CHECK_RESULTS", "抽样结果", "照片检查+"]
+    exclude_dirs = ["重叠检查结果", "抽样结果", "照片检查+"]
     all_json_files = list(scan_json_files(target_dir, exclude_dirs=exclude_dirs))
 
     total_files = len(all_json_files)
@@ -148,7 +163,7 @@ def run_validator(target_dir: str, dict_path: str) -> tuple[str | None, str | No
                 
                 for err_lab in file_errors:
                     rel_path = os.path.relpath(file_path, target_dir)
-                    error_list.append([rel_path, err_lab, "不在字典中"])
+                    error_list.append([rel_path, err_lab, "不在标签列表中"])
                     error_files.add(rel_path)
                     
         except Exception as e:
@@ -191,7 +206,7 @@ def export_template(output_dir: str, file_type: str = 'csv') -> str:
         模板文件路径
     """
     if file_type == 'csv':
-        template_path = os.path.join(output_dir, "label_template.csv")
+        template_path = os.path.join(output_dir, "标签列表示例模板.csv")
         with open(template_path, 'w', newline='', encoding='utf-8-sig') as f:
             writer = csv.writer(f)
             writer.writerow(['label'])
@@ -199,9 +214,9 @@ def export_template(output_dir: str, file_type: str = 'csv') -> str:
         from openpyxl import Workbook
         wb = Workbook()
         ws = wb.active
-        ws.title = "标签字典"
+        ws.title = "标签列表"
         ws.append(['label'])
-        template_path = os.path.join(output_dir, "label_template.xlsx")
+        template_path = os.path.join(output_dir, "标签列表示例模板.xlsx")
         wb.save(template_path)
     
     return template_path
@@ -220,14 +235,19 @@ if __name__ == "__main__":
         exit()
     
     dict_file = filedialog.askopenfilename(
-        title="选择标签字典文件",
-        filetypes=[("字典文件", "*.csv *.txt *.xlsx *.xls")]
+        title="选择标签文件",
+        filetypes=[("标签文件", "*.csv *.txt *.xlsx *.xls")]
     )
     if not dict_file:
-        print("未选择字典文件")
+        print("未选择标签文件")
         exit()
     
-    output_path, error, stats = run_validator(target_dir, dict_file)
+    valid_labels, load_error = load_label_dict(dict_file)
+    if load_error:
+        messagebox.showerror("错误", load_error)
+        exit()
+
+    output_path, error, stats = run_validator(target_dir, valid_labels)
     
     if error:
         messagebox.showerror("错误", error)

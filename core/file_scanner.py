@@ -48,13 +48,13 @@ def is_image_file(filename: str) -> bool:
 
 
 def get_leaf_folders(root_path: str) -> list[str]:
-    """获取所有叶子文件夹（无子文件夹的目录）
+    """获取所有最内层文件夹（无子文件夹的目录）
     
     参数:
         root_path: 根目录路径
     
     返回:
-        叶子文件夹路径列表
+        最内层文件夹路径列表
     """
     leaf_folders = []
     for root, dirs, files in os.walk(root_path):
@@ -64,10 +64,10 @@ def get_leaf_folders(root_path: str) -> list[str]:
 
 
 def scan_leaf_dir(leaf_dir: str) -> dict:
-    """扫描单个叶子文件夹内的文件配对情况
+    """扫描单个最内层文件夹内的文件配对情况
     
     参数:
-        leaf_dir: 叶子文件夹路径
+        leaf_dir: 最内层文件夹路径
     
     返回:
         {
@@ -131,7 +131,7 @@ def scan_leaf_dir(leaf_dir: str) -> dict:
 
 
 def scan_all_leaf_dirs(root_path: str) -> dict:
-    """扫描所有叶子文件夹，返回汇总统计
+    """扫描所有最内层文件夹，返回汇总统计
     
     参数:
         root_path: 根目录路径
@@ -179,10 +179,10 @@ def scan_all_leaf_dirs(root_path: str) -> dict:
 
 
 def find_orphans_in_leaf(leaf_dir: str) -> dict:
-    """查找叶子文件夹中的孤立文件和特殊配对
+    """查找最内层文件夹中的孤立文件和特殊配对
     
     参数:
-        leaf_dir: 叶子文件夹路径
+        leaf_dir: 最内层文件夹路径
     
     返回:
         {
@@ -238,7 +238,7 @@ def find_orphans_in_leaf(leaf_dir: str) -> dict:
 
 
 def find_all_orphans(root_path: str) -> dict:
-    """扫描所有叶子文件夹中的孤立文件
+    """扫描所有最内层文件夹中的孤立文件
     
     参数:
         root_path: 根目录路径

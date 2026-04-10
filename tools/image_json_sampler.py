@@ -30,7 +30,7 @@ def get_image_json_pairs(root_path: str) -> dict[str, list[tuple[str, str]]]:
     返回:
         文件夹路径到 (图片名, json名) 列表的映射
     """
-    exclude_dirs = ["照片检查+", "抽样结果", "ERROR_CHECK_RESULTS"]
+    exclude_dirs = ["照片检查+", "抽样结果", "重叠检查结果"]
     return scan_image_json_pairs(root_path, exclude_dirs=exclude_dirs)
 
 
@@ -73,7 +73,7 @@ def run_sampler(source_dir: str, output_dir: str, sample_count: int = 50) -> tup
     """执行抽样逻辑
     
     参数:
-        source_dir: 源文件夹路径
+        source_dir: 数据文件夹路径
         output_dir: 输出目录路径
         sample_count: 抽样数量
     
@@ -84,17 +84,17 @@ def run_sampler(source_dir: str, output_dir: str, sample_count: int = 50) -> tup
         - stats: {'sampled': int, 'labels': int, 'total_found': int}
     """
     if not os.path.isdir(source_dir):
-        return None, "源文件夹不存在或不是有效目录", {}
+        return None, "数据文件夹不存在或不是有效目录", {}
 
     output_path = Path(output_dir).resolve()
     source_path = Path(source_dir).resolve()
 
-    exclude_dirs = [str(output_path), "照片检查+", "抽样结果", "ERROR_CHECK_RESULTS"]
+    exclude_dirs = [str(output_path), "照片检查+", "抽样结果", "重叠检查结果"]
     folder_map = scan_image_json_pairs(source_dir, exclude_dirs=exclude_dirs)
     total_found = sum(len(v) for v in folder_map.values())
 
     if total_found == 0:
-        return None, "源文件夹内未找到有效的图片和同名JSON对", {}
+        return None, "数据文件夹内未找到有效的图片和同名 JSON 配对", {}
 
     output_path.mkdir(parents=True, exist_ok=True)
 
@@ -138,7 +138,7 @@ def get_default_output_dir(source_dir: str) -> str:
     """获取默认输出目录路径
     
     参数:
-        source_dir: 源文件夹路径
+        source_dir: 数据文件夹路径
     
     返回:
         默认输出目录路径 (源目录/抽样结果)

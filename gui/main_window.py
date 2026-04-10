@@ -10,15 +10,16 @@ import customtkinter as ctk
 from .theme import *
 from tools.image_count import run_count
 from tools.image_json_sampler import run_sampler, get_default_output_dir
-from tools.label_validator import run_validator, export_template
+from tools.label_counter import run_label_counter, load_ordered_labels, parse_manual_ordered_labels
+from tools.label_validator import run_validator, export_template, load_label_dict, parse_manual_labels
 from tools.orphan_image_cleaner import run_scan, run_clean
 from tools.polygon_overlap_checker import run_polygon_overlap_check
 
 
 HELP_TEXTS = {
     "image_count": [
-        "选择扫描文件夹后点击“开始扫描”，结果会导出为 Excel。",
-        "只在叶子文件夹内配对，支持 jpg、jpeg、png、tif、tiff。",
+        "选择数据文件夹后点击“开始扫描”，结果会导出为 Excel。",
+        "只在最内层文件夹内配对，支持 jpg、jpeg、png、tif、tiff。",
         "结果文件保存在源目录，文件名为 文件计数统计结果.xlsx。",
     ],
     "orphan_cleaner": [
@@ -27,17 +28,24 @@ HELP_TEXTS = {
         "删除操作不可恢复，建议先确认扫描结果。",
     ],
     "label_validator": [
-        "先选择待检查文件夹，再上传字典文件后开始检查。",
-        "字典支持 csv、txt、xlsx、xls；表头第一列需为 label。",
+        "先选择数据文件夹，再上传标签文件或手动输入标签后开始检查。",
+        "若同时提供标签文件和手动输入，优先使用标签文件。",
+        "标签文件支持 csv、txt、xlsx、xls；表头第一列需为 label。",
         "检查报告保存在源目录，文件名为 标签校验报告.xlsx。",
     ],
+    "label_counter": [
+        "先选择数据文件夹，再上传标签文件或手动输入标签后开始统计。",
+        "若同时提供标签文件和手动输入，优先使用标签文件。",
+        "报告按上传顺序为每个标签生成一列，未出现的标签显示为 0。",
+        "统计报告保存在源目录，文件名为 标签出现次数统计报告.xlsx。",
+    ],
     "polygon_checker": [
-        "选择源文件夹，可设置阈值和输出目录，然后开始检查。",
+        "选择数据文件夹，可设置阈值和输出目录，然后开始检查。",
         "只检查 polygon，原始文件不会被修改，问题副本会单独导出。",
-        "默认生成 ERROR_CHECK_RESULTS 目录，并输出 多边形重叠检查报告.xlsx 报告。",
+        "默认生成 重叠检查结果 目录，并输出 多边形重叠检查报告.xlsx 报告。",
     ],
     "sampler": [
-        "选择源文件夹，设置抽样数量和输出目录后开始抽样。",
+        "选择数据文件夹，设置抽样数量和输出目录后开始抽样。",
         "若不填写输出目录，会在源目录下自动创建抽样结果文件夹。",
         "会复制抽中的图片与 JSON，并统计 shapes 总数。",
     ],
@@ -233,7 +241,7 @@ class OrphanCleanerPanel(ctk.CTkFrame):
         self.radio_json.pack(side="left")
 
         self.folder_selector = PathSelector(
-            self.params_card, label="源文件夹"
+            self.params_card, label="数据文件夹"
         )
         self.folder_selector.pack(fill="x", padx=15, pady=(0, 15))
 
@@ -318,7 +326,7 @@ class OrphanCleanerPanel(ctk.CTkFrame):
         self.lbl_special.pack(side="left", padx=(0, 20))
 
         self.lbl_folder = ctk.CTkLabel(
-            self.row2_frame, text="扫描文件夹: 0 个",
+            self.row2_frame, text="扫描到的文件夹: 0 个",
             font=APP_FONT, text_color=COLOR_TEXT_SECONDARY
         )
         self.lbl_folder.pack(side="left")
@@ -340,12 +348,12 @@ class OrphanCleanerPanel(ctk.CTkFrame):
     def _run_scan(self):
         target_dir = self.folder_selector.get()
         if not target_dir:
-            self.log_viewer.append("请选择源文件夹")
+            self.log_viewer.append("请选择数据文件夹")
             return
 
         self.btn_scan.configure(state="disabled", text="扫描中...")
         self.log_viewer.clear()
-        self.log_viewer.append(f"开始扫描文件夹: {target_dir}")
+        self.log_viewer.append(f"开始扫描数据文件夹: {target_dir}")
         self.log_viewer.append(f"支持图片格式: jpg, jpeg, png, tif, tiff")
 
         start_time = time.time()
@@ -373,14 +381,14 @@ class OrphanCleanerPanel(ctk.CTkFrame):
         self.log_viewer.append(f"有效配对: {stats['paired']} 对")
         self.log_viewer.append(f"孤立图片: {stats['orphan_image']} 个")
         self.log_viewer.append(f"孤立JSON: {stats['orphan_json']} 个")
-        self.log_viewer.append(f"扫描文件夹: {stats['folder_count']} 个")
+        self.log_viewer.append(f"扫描到的文件夹: {stats['folder_count']} 个")
 
         special_count = len(stats.get('special_pairs', []))
         self.lbl_paired.configure(text=f"有效配对: {stats['paired']} 对")
         self.lbl_orphan_image.configure(text=f"孤立图片: {stats['orphan_image']} 个")
         self.lbl_orphan_json.configure(text=f"孤立JSON: {stats['orphan_json']} 个")
         self.lbl_special.configure(text=f"特殊配对: {special_count} 组")
-        self.lbl_folder.configure(text=f"扫描文件夹: {stats['folder_count']} 个")
+        self.lbl_folder.configure(text=f"扫描到的文件夹: {stats['folder_count']} 个")
 
         if special_count > 0:
             self.log_viewer.append(f"特殊配对: {special_count} 组（需要手动处理）")
@@ -405,7 +413,7 @@ class OrphanCleanerPanel(ctk.CTkFrame):
     def _run_clean(self):
         target_dir = self.folder_selector.get()
         if not target_dir:
-            self.log_viewer.append("请选择源文件夹")
+            self.log_viewer.append("请选择数据文件夹")
             return
 
         if not self.scan_stats:
@@ -515,7 +523,7 @@ class OrphanCleanerPanel(ctk.CTkFrame):
         self.lbl_orphan_image.configure(text="孤立图片: 0 个")
         self.lbl_orphan_json.configure(text="孤立JSON: 0 个")
         self.lbl_special.configure(text="特殊配对: 0 组")
-        self.lbl_folder.configure(text="扫描文件夹: 0 个")
+        self.lbl_folder.configure(text="扫描到的文件夹: 0 个")
         self._refresh_clean_button_state()
 
 
@@ -536,7 +544,7 @@ class LabelValidatorPanel(ctk.CTkFrame):
 
         self.desc_label = ctk.CTkLabel(
             self,
-            text="校验 JSON 文件中的标签是否在有效字典中",
+            text="校验 JSON 文件中的标签是否在有效标签列表中",
             font=APP_FONT, text_color=COLOR_TEXT_SECONDARY
         )
         self.desc_label.pack(anchor="w", pady=(0, 20), padx=20)
@@ -548,7 +556,7 @@ class LabelValidatorPanel(ctk.CTkFrame):
         self.params_card.pack(fill="x", padx=20, pady=(0, 15))
 
         self.folder_selector = PathSelector(
-            self.params_card, label="待校验文件夹"
+            self.params_card, label="数据文件夹"
         )
         self.folder_selector.pack(fill="x", padx=15, pady=(15, 10))
 
@@ -556,7 +564,7 @@ class LabelValidatorPanel(ctk.CTkFrame):
         self.dict_frame.pack(fill="x", padx=15, pady=(0, 10))
 
         self.dict_label = ctk.CTkLabel(
-            self.dict_frame, text="标签字典", font=APP_FONT,
+            self.dict_frame, text="标签列表", font=APP_FONT,
             text_color=COLOR_TEXT_SECONDARY
         )
         self.dict_label.pack(side="left", padx=(0, 10))
@@ -564,7 +572,7 @@ class LabelValidatorPanel(ctk.CTkFrame):
         self.dict_var = ctk.StringVar()
         self.dict_entry = ctk.CTkEntry(
             self.dict_frame, textvariable=self.dict_var, font=APP_FONT,
-            placeholder_text="请上传标签字典文件",
+            placeholder_text="请上传标签文件",
             placeholder_text_color=COLOR_TEXT_MUTED,
             fg_color=COLOR_BG_INPUT, border_color=COLOR_BORDER
         )
@@ -592,6 +600,36 @@ class LabelValidatorPanel(ctk.CTkFrame):
             font=APP_FONT_SMALL, text_color=COLOR_TEXT_MUTED
         )
         self.dict_preview.pack(anchor="w", padx=15, pady=(0, 15))
+
+        self.manual_label = ctk.CTkLabel(
+            self.params_card,
+            text="手动输入标签",
+            font=APP_FONT,
+            text_color=COLOR_TEXT_SECONDARY
+        )
+        self.manual_label.pack(anchor="w", padx=15, pady=(0, 8))
+
+        self.manual_input = ctk.CTkTextbox(
+            self.params_card,
+            height=90,
+            font=APP_FONT,
+            text_color=COLOR_TEXT_PRIMARY,
+            fg_color=COLOR_BG_INPUT,
+            border_width=1,
+            border_color=COLOR_BORDER,
+        )
+        self.manual_input.pack(fill="x", padx=15, pady=(0, 8))
+
+        self.manual_hint = ctk.CTkLabel(
+            self.params_card,
+            text="支持多个标签，使用换行、逗号或分号分隔；若同时提供标签文件和手动输入，优先使用标签文件。",
+            font=APP_FONT_SMALL,
+            text_color=COLOR_TEXT_MUTED,
+            justify="left",
+            anchor="w",
+            wraplength=780,
+        )
+        self.manual_hint.pack(fill="x", padx=15, pady=(0, 15))
 
         self.buttons_card = ctk.CTkFrame(self, fg_color="transparent")
         self.buttons_card.pack(fill="x", padx=20, pady=(0, 15))
@@ -649,12 +687,11 @@ class LabelValidatorPanel(ctk.CTkFrame):
 
     def _upload_dict(self):
         file_path = filedialog.askopenfilename(
-            title="选择标签字典文件",
-            filetypes=[("字典文件", "*.csv *.txt *.xlsx *.xls"), ("所有文件", "*.*")]
+            title="选择标签文件",
+            filetypes=[("标签文件", "*.csv *.txt *.xlsx *.xls"), ("所有文件", "*.*")]
         )
         if file_path:
             self.dict_var.set(file_path)
-            from tools.label_validator import load_label_dict
             labels, error = load_label_dict(file_path)
             if error:
                 self.dict_preview.configure(text=f"加载失败: {error}", text_color="#EF4444")
@@ -666,7 +703,8 @@ class LabelValidatorPanel(ctk.CTkFrame):
 
     def _show_format_help(self):
         help_text = (
-            "支持的字典文件格式：CSV / TXT / XLSX / XLS\n\n"
+            "支持的标签文件格式：CSV / TXT / XLSX / XLS\n\n"
+            "也支持直接在面板中手动输入一个或多个标签。\n\n"
             "【CSV 格式示例】\n"
             "第一列列名必须为 'label'\n"
             "label\n"
@@ -684,8 +722,8 @@ class LabelValidatorPanel(ctk.CTkFrame):
             "第一列列名必须为 'label'，后续行填写标签值"
         )
         
-        help_window = create_modal_window(self, "字典文件格式说明", 620, 540)
-        create_modal_header(help_window, "字典文件格式说明", "支持 CSV、TXT、XLSX、XLS。请按下面示例准备第一列或每行的标签值。")
+        help_window = create_modal_window(self, "标签文件格式说明", 620, 540)
+        create_modal_header(help_window, "标签文件格式说明", "支持 CSV、TXT、XLSX、XLS。请按下面示例准备第一列或每行的标签值。")
         
         textbox = ctk.CTkTextbox(
             help_window,
@@ -713,35 +751,61 @@ class LabelValidatorPanel(ctk.CTkFrame):
     def _run_validator(self):
         target_dir = self.folder_selector.get()
         if not target_dir:
-            self.log_viewer.append("请选择源文件夹")
+            self.log_viewer.append("请选择数据文件夹")
             return
-        
+
         dict_path = self.dict_var.get().strip()
-        if not dict_path:
-            self.log_viewer.append("请上传标签字典文件")
+        manual_text = self.manual_input.get("1.0", "end").strip()
+
+        if not dict_path and not manual_text:
+            self.log_viewer.append("请上传标签文件或手动输入标签")
             return
-        
-        if not os.path.exists(dict_path):
-            self.log_viewer.append("字典文件不存在")
+
+        valid_labels = None
+        source_message = ""
+
+        if dict_path:
+            if not os.path.exists(dict_path):
+                self.log_viewer.append("标签文件不存在")
+                return
+
+            valid_labels, error = load_label_dict(dict_path)
+            if error:
+                self.log_viewer.append(f"标签文件加载失败: {error}")
+                return
+
+            source_message = f"使用标签文件: {dict_path}"
+        else:
+            valid_labels, error = parse_manual_labels(manual_text)
+            if error:
+                self.log_viewer.append(f"手动输入解析失败: {error}")
+                return
+
+            source_message = f"使用手动输入标签，共 {len(valid_labels)} 个"
+
+        if valid_labels is None:
+            self.log_viewer.append("未获取到有效标签")
             return
-        
+
         self.btn_run.configure(state="disabled", text="检查中...")
         self.result_path = None
         self.btn_open_folder.configure(state="disabled")
         self.log_viewer.clear()
-        self.log_viewer.append(f"开始检查文件夹: {target_dir}")
-        self.log_viewer.append(f"使用字典: {dict_path}")
-        
+        self.log_viewer.append(f"开始检查数据文件夹: {target_dir}")
+        if dict_path and manual_text:
+            self.log_viewer.append("检测到同时提供标签文件和手动输入，本次优先使用标签文件")
+        self.log_viewer.append(source_message)
+
         start_time = time.time()
-        
+
         def run_task():
             try:
-                output_path, error, stats = run_validator(target_dir, dict_path)
+                output_path, error, stats = run_validator(target_dir, valid_labels)
             except Exception as exc:
                 output_path, error, stats = None, f"执行检查失败: {str(exc)}", {}
             elapsed = time.time() - start_time
             self.after(0, lambda: self._on_complete(output_path, error, stats, elapsed))
-        
+
         thread = threading.Thread(target=run_task, daemon=True)
         thread.start()
 
@@ -765,6 +829,323 @@ class LabelValidatorPanel(ctk.CTkFrame):
     def _clear_input(self):
         self.folder_selector.set("")
         self.dict_var.set("")
+        self.manual_input.delete("1.0", "end")
+        self.dict_preview.configure(text="", text_color=COLOR_TEXT_MUTED)
+        self.log_viewer.clear()
+        self.result_path = None
+        self.btn_open_folder.configure(state="disabled")
+
+    def _open_result_folder(self):
+        if self.result_path and os.path.exists(self.result_path):
+            result_folder = os.path.dirname(self.result_path)
+            import platform
+            if platform.system() == "Windows":
+                os.startfile(result_folder)
+            else:
+                import subprocess
+                subprocess.run(["open", result_folder])
+
+
+class LabelCounterPanel(ctk.CTkFrame):
+    """标签出现次数统计工具面板"""
+
+    def __init__(self, master, **kwargs):
+        super().__init__(master, fg_color="transparent", **kwargs)
+
+        self._create_ui()
+
+    def _create_ui(self):
+        self.title_label = ctk.CTkLabel(
+            self, text="标签出现次数统计",
+            font=APP_FONT_HEADER, text_color=COLOR_TEXT_PRIMARY
+        )
+        self.title_label.pack(anchor="w", pady=(20, 10), padx=20)
+
+        self.desc_label = ctk.CTkLabel(
+            self,
+            text="统计每个 JSON 文件内指定标签的出现次数，并导出 Excel 报告",
+            font=APP_FONT, text_color=COLOR_TEXT_SECONDARY
+        )
+        self.desc_label.pack(anchor="w", pady=(0, 20), padx=20)
+
+        self.help_card = ToolHelpCard(self, lines=HELP_TEXTS["label_counter"])
+        self.help_card.pack(fill="x", padx=20, pady=(0, 15))
+
+        self.params_card = ctk.CTkFrame(self, fg_color=COLOR_BG_CARD, corner_radius=12)
+        self.params_card.pack(fill="x", padx=20, pady=(0, 15))
+
+        self.folder_selector = PathSelector(
+            self.params_card, label="数据文件夹"
+        )
+        self.folder_selector.pack(fill="x", padx=15, pady=(15, 10))
+
+        self.dict_frame = ctk.CTkFrame(self.params_card, fg_color="transparent")
+        self.dict_frame.pack(fill="x", padx=15, pady=(0, 10))
+
+        self.dict_label = ctk.CTkLabel(
+            self.dict_frame, text="标签文件", font=APP_FONT,
+            text_color=COLOR_TEXT_SECONDARY
+        )
+        self.dict_label.pack(side="left", padx=(0, 10))
+
+        self.dict_var = ctk.StringVar()
+        self.dict_entry = ctk.CTkEntry(
+            self.dict_frame, textvariable=self.dict_var, font=APP_FONT,
+            placeholder_text="请上传标签文件",
+            placeholder_text_color=COLOR_TEXT_MUTED,
+            fg_color=COLOR_BG_INPUT, border_color=COLOR_BORDER
+        )
+        self.dict_entry.pack(side="left", fill="x", expand=True, padx=(0, 10))
+
+        self.btn_upload = ctk.CTkButton(
+            self.dict_frame, text="上传", font=APP_FONT,
+            width=70, fg_color=COLOR_PRIMARY, hover_color=COLOR_PRIMARY_HOVER,
+            text_color="#FFFFFF",
+            command=self._upload_dict
+        )
+        self.btn_upload.pack(side="left", padx=(0, 10))
+
+        self.btn_format_help = ctk.CTkButton(
+            self.dict_frame, text="格式说明", font=APP_FONT,
+            width=80, fg_color=COLOR_TEXT_MUTED, hover_color=COLOR_BORDER,
+            text_color="#FFFFFF",
+            command=self._show_format_help
+        )
+        self.btn_format_help.pack(side="left")
+
+        self.dict_preview = ctk.CTkLabel(
+            self.params_card,
+            text="",
+            font=APP_FONT_SMALL, text_color=COLOR_TEXT_MUTED
+        )
+        self.dict_preview.pack(anchor="w", padx=15, pady=(0, 15))
+
+        self.manual_label = ctk.CTkLabel(
+            self.params_card,
+            text="手动输入标签",
+            font=APP_FONT,
+            text_color=COLOR_TEXT_SECONDARY
+        )
+        self.manual_label.pack(anchor="w", padx=15, pady=(0, 8))
+
+        self.manual_input = ctk.CTkTextbox(
+            self.params_card,
+            height=90,
+            font=APP_FONT,
+            text_color=COLOR_TEXT_PRIMARY,
+            fg_color=COLOR_BG_INPUT,
+            border_width=1,
+            border_color=COLOR_BORDER,
+        )
+        self.manual_input.pack(fill="x", padx=15, pady=(0, 8))
+
+        self.manual_hint = ctk.CTkLabel(
+            self.params_card,
+            text="支持多个标签，使用换行、逗号或分号分隔；若同时提供标签文件和手动输入，优先使用标签文件。",
+            font=APP_FONT_SMALL,
+            text_color=COLOR_TEXT_MUTED,
+            justify="left",
+            anchor="w",
+            wraplength=780,
+        )
+        self.manual_hint.pack(fill="x", padx=15, pady=(0, 15))
+
+        self.buttons_card = ctk.CTkFrame(self, fg_color="transparent")
+        self.buttons_card.pack(fill="x", padx=20, pady=(0, 15))
+
+        self.btn_run = ctk.CTkButton(
+            self.buttons_card, text="开始统计",
+            font=APP_FONT_BOLD, height=45,
+            fg_color=COLOR_PRIMARY, hover_color=COLOR_PRIMARY_HOVER,
+            text_color="#FFFFFF",
+            command=self._run_counter
+        )
+        self.btn_run.pack(side="left", padx=(0, 10))
+
+        self.btn_open_folder = ctk.CTkButton(
+            self.buttons_card, text="打开结果文件夹",
+            font=APP_FONT, height=45,
+            fg_color=COLOR_SUCCESS, hover_color=COLOR_SUCCESS,
+            text_color="#FFFFFF",
+            command=self._open_result_folder,
+            state="disabled"
+        )
+        self.btn_open_folder.pack(side="left", padx=(0, 10))
+
+        self.btn_template = ctk.CTkButton(
+            self.buttons_card, text="下载模板",
+            font=APP_FONT, height=45,
+            fg_color=COLOR_TEXT_MUTED, hover_color=COLOR_BORDER,
+            text_color="#FFFFFF",
+            command=self._download_template
+        )
+        self.btn_template.pack(side="left", padx=(0, 10))
+
+        self.btn_clear = ctk.CTkButton(
+            self.buttons_card, text="清空",
+            font=APP_FONT, height=45,
+            fg_color=COLOR_TEXT_MUTED, hover_color=COLOR_BORDER,
+            text_color="#FFFFFF",
+            command=self._clear_input
+        )
+        self.btn_clear.pack(side="left")
+
+        self.result_path = None
+
+        self.log_card = ctk.CTkFrame(self, fg_color=COLOR_BG_CARD, corner_radius=12)
+        self.log_card.pack(fill="both", expand=True, padx=20, pady=(0, 20))
+
+        self.log_label = ctk.CTkLabel(
+            self.log_card, text="执行日志",
+            font=APP_FONT_BOLD, text_color=COLOR_TEXT_PRIMARY
+        )
+        self.log_label.pack(anchor="w", padx=15, pady=(10, 5))
+
+        self.log_viewer = LogViewer(self.log_card, height=200)
+        self.log_viewer.pack(fill="both", expand=True, padx=10, pady=(0, 10))
+
+    def _upload_dict(self):
+        file_path = filedialog.askopenfilename(
+            title="选择标签文件",
+            filetypes=[("标签文件", "*.csv *.txt *.xlsx *.xls"), ("所有文件", "*.*")]
+        )
+        if file_path:
+            self.dict_var.set(file_path)
+            labels, error = load_ordered_labels(file_path)
+            if error:
+                self.dict_preview.configure(text=f"加载失败: {error}", text_color="#EF4444")
+            else:
+                self.dict_preview.configure(
+                    text=f"已加载 {len(labels)} 个标签（按原始顺序）",
+                    text_color=COLOR_SUCCESS
+                )
+
+    def _show_format_help(self):
+        help_text = (
+            "支持的标签文件格式：CSV / TXT / XLSX / XLS\n\n"
+            "也支持直接在面板中手动输入一个或多个标签。\n\n"
+            "【CSV 格式示例】\n"
+            "第一列列名必须为 'label'\n"
+            "label\n"
+            "0101\n"
+            "0201\n"
+            "0301\n\n"
+            "【TXT 格式示例】\n"
+            "每行一个标签值，按行顺序生成报告列\n"
+            "0101\n"
+            "0201\n"
+            "0301\n\n"
+            "【XLSX/XLS 格式示例】\n"
+            "第一列列名必须为 'label'，后续行按顺序填写标签值"
+        )
+
+        help_window = create_modal_window(self, "标签文件格式说明", 620, 520)
+        create_modal_header(help_window, "标签文件格式说明", "支持 CSV、TXT、XLSX、XLS。报告列顺序与上传文件中的标签顺序一致。")
+
+        textbox = ctk.CTkTextbox(
+            help_window,
+            font=APP_FONT,
+            text_color=COLOR_TEXT_PRIMARY,
+            fg_color=COLOR_BG_INPUT,
+            border_width=1,
+            border_color=COLOR_BORDER,
+        )
+        textbox.pack(fill="both", expand=True, padx=20, pady=(0, 20))
+        textbox.insert("1.0", help_text)
+        textbox.configure(state="disabled")
+
+    def _download_template(self):
+        folder = filedialog.askdirectory(title="选择模板保存位置")
+        if not folder:
+            return
+
+        try:
+            template_path = export_template(folder, 'csv')
+            self.log_viewer.append(f"模板已保存: {template_path}")
+        except Exception as e:
+            self.log_viewer.append(f"导出模板失败: {str(e)}")
+
+    def _run_counter(self):
+        target_dir = self.folder_selector.get().strip()
+        if not target_dir:
+            self.log_viewer.append("请选择数据文件夹")
+            return
+
+        dict_path = self.dict_var.get().strip()
+        manual_text = self.manual_input.get("1.0", "end").strip()
+
+        if not dict_path and not manual_text:
+            self.log_viewer.append("请上传标签文件或手动输入标签")
+            return
+
+        ordered_labels = None
+        source_message = ""
+
+        if dict_path:
+            if not os.path.exists(dict_path):
+                self.log_viewer.append("标签文件不存在")
+                return
+
+            ordered_labels, error = load_ordered_labels(dict_path)
+            if error:
+                self.log_viewer.append(f"标签文件加载失败: {error}")
+                return
+
+            source_message = f"使用标签文件: {dict_path}"
+        else:
+            ordered_labels, error = parse_manual_ordered_labels(manual_text)
+            if error:
+                self.log_viewer.append(f"手动输入解析失败: {error}")
+                return
+
+            source_message = f"使用手动输入标签，共 {len(ordered_labels)} 个"
+
+        if ordered_labels is None:
+            self.log_viewer.append("未获取到有效标签")
+            return
+
+        self.btn_run.configure(state="disabled", text="统计中...")
+        self.result_path = None
+        self.btn_open_folder.configure(state="disabled")
+        self.log_viewer.clear()
+        self.log_viewer.append(f"开始统计数据文件夹: {target_dir}")
+        if dict_path and manual_text:
+            self.log_viewer.append("检测到同时提供标签文件和手动输入，本次优先使用标签文件")
+        self.log_viewer.append(source_message)
+
+        start_time = time.time()
+
+        def run_task():
+            try:
+                output_path, error, stats = run_label_counter(target_dir, ordered_labels)
+            except Exception as exc:
+                output_path, error, stats = None, f"执行统计失败: {str(exc)}", {}
+            elapsed = time.time() - start_time
+            self.after(0, lambda: self._on_complete(output_path, error, stats, elapsed))
+
+        thread = threading.Thread(target=run_task, daemon=True)
+        thread.start()
+
+    def _on_complete(self, output_path, error, stats, elapsed):
+        self.btn_run.configure(state="normal", text="开始统计")
+
+        if error:
+            self.log_viewer.append(f"错误: {error}")
+            return
+
+        self.result_path = output_path
+        self.log_viewer.append(f"统计完成! 用时: {elapsed:.2f}秒")
+        self.log_viewer.append(f"JSON 总数: {stats['total_files']}")
+        self.log_viewer.append(f"成功统计: {stats['success_files']}")
+        self.log_viewer.append(f"异常文件: {stats['error_files']}")
+        self.log_viewer.append(f"标签列数: {stats['label_count']}")
+        self.log_viewer.append(f"报告已保存: {output_path}")
+        self.btn_open_folder.configure(state="normal")
+
+    def _clear_input(self):
+        self.folder_selector.set("")
+        self.dict_var.set("")
+        self.manual_input.delete("1.0", "end")
         self.dict_preview.configure(text="", text_color=COLOR_TEXT_MUTED)
         self.log_viewer.clear()
         self.result_path = None
@@ -811,7 +1192,7 @@ class PolygonOverlapPanel(ctk.CTkFrame):
         self.params_card.pack(fill="x", padx=20, pady=(0, 15))
 
         self.source_selector = PathSelector(
-            self.params_card, label="源文件夹"
+            self.params_card, label="数据文件夹"
         )
         self.source_selector.pack(fill="x", padx=15, pady=(15, 10))
 
@@ -827,7 +1208,7 @@ class PolygonOverlapPanel(ctk.CTkFrame):
         self.output_var = ctk.StringVar()
         self.output_entry = ctk.CTkEntry(
             self.output_frame, textvariable=self.output_var, font=APP_FONT,
-            placeholder_text="默认: 源文件夹/ERROR_CHECK_RESULTS",
+            placeholder_text="默认: 数据文件夹/重叠检查结果",
             placeholder_text_color=COLOR_TEXT_MUTED,
             fg_color=COLOR_BG_INPUT, border_color=COLOR_BORDER
         )
@@ -924,12 +1305,12 @@ class PolygonOverlapPanel(ctk.CTkFrame):
         self.log_viewer.pack(fill="both", expand=True, padx=10, pady=(0, 10))
 
     def _get_default_output_dir(self, source_dir: str) -> str:
-        return os.path.join(source_dir, "ERROR_CHECK_RESULTS")
+        return os.path.join(source_dir, "重叠检查结果")
 
     def _set_default_output(self):
         source_dir = self.source_selector.get().strip()
         if not source_dir:
-            self.log_viewer.append("请先选择源文件夹")
+            self.log_viewer.append("请先选择数据文件夹")
             return
 
         self.output_var.set(self._get_default_output_dir(source_dir))
@@ -942,7 +1323,7 @@ class PolygonOverlapPanel(ctk.CTkFrame):
     def _run_checker(self):
         source_dir = self.source_selector.get().strip()
         if not source_dir:
-            self.log_viewer.append("请选择源文件夹")
+            self.log_viewer.append("请选择数据文件夹")
             return
 
         try:
@@ -963,7 +1344,7 @@ class PolygonOverlapPanel(ctk.CTkFrame):
         self.btn_open_folder.configure(state="disabled")
         self.result_path = None
         self.log_viewer.clear()
-        self.log_viewer.append(f"开始检查文件夹: {source_dir}")
+        self.log_viewer.append(f"开始检查数据文件夹: {source_dir}")
         self.log_viewer.append(f"输出目录: {output_dir}")
         self.log_viewer.append(f"重叠面积阈值: {threshold}")
 
@@ -1075,7 +1456,7 @@ class SamplerPanel(ctk.CTkFrame):
         self.params_card.pack(fill="x", padx=20, pady=(0, 15))
 
         self.source_selector = PathSelector(
-            self.params_card, label="源文件夹"
+            self.params_card, label="数据文件夹"
         )
         self.source_selector.pack(fill="x", padx=15, pady=(15, 10))
 
@@ -1091,7 +1472,7 @@ class SamplerPanel(ctk.CTkFrame):
         self.output_var = ctk.StringVar()
         self.output_entry = ctk.CTkEntry(
             self.output_frame, textvariable=self.output_var, font=APP_FONT,
-            placeholder_text="默认: 源文件夹/抽样结果xxx",
+            placeholder_text="默认: 数据文件夹/抽样结果xxx",
             placeholder_text_color=COLOR_TEXT_MUTED,
             fg_color=COLOR_BG_INPUT, border_color=COLOR_BORDER
         )
@@ -1184,7 +1565,7 @@ class SamplerPanel(ctk.CTkFrame):
     def _set_default_output(self):
         source_dir = self.source_selector.get()
         if not source_dir:
-            self.log_viewer.append("请先选择源文件夹")
+            self.log_viewer.append("请先选择数据文件夹")
             return
         default_dir = get_default_output_dir(source_dir)
         self.output_var.set(default_dir)
@@ -1197,7 +1578,7 @@ class SamplerPanel(ctk.CTkFrame):
     def _run_sampler(self):
         source_dir = self.source_selector.get()
         if not source_dir:
-            self.log_viewer.append("请选择源文件夹")
+            self.log_viewer.append("请选择数据文件夹")
             return
 
         output_dir = self.output_var.get().strip()
@@ -1218,7 +1599,7 @@ class SamplerPanel(ctk.CTkFrame):
         self.result_path = None
         self.btn_open_folder.configure(state="disabled")
         self.log_viewer.clear()
-        self.log_viewer.append(f"开始扫描文件夹: {source_dir}")
+        self.log_viewer.append(f"开始抽样数据文件夹: {source_dir}")
         self.log_viewer.append(f"输出目录: {output_dir}")
         self.log_viewer.append(f"抽样数量: {sample_count} 张")
 
@@ -1285,7 +1666,7 @@ class ImageCountPanel(ctk.CTkFrame):
         
         self.desc_label = ctk.CTkLabel(
             self,
-            text="统计指定目录下所有子文件夹中的图片文件与 JSON 文件的配对情况",
+            text="统计指定目录下各最内层文件夹中的图片文件与 JSON 文件配对情况",
             font=APP_FONT, text_color=COLOR_TEXT_SECONDARY
         )
         self.desc_label.pack(anchor="w", pady=(0, 20), padx=20)
@@ -1297,7 +1678,7 @@ class ImageCountPanel(ctk.CTkFrame):
         self.params_card.pack(fill="x", padx=20, pady=(0, 15))
         
         self.path_selector = PathSelector(
-            self.params_card, label="扫描文件夹"
+            self.params_card, label="数据文件夹"
         )
         self.path_selector.pack(fill="x", padx=15, pady=(15, 15))
         
@@ -1356,14 +1737,14 @@ class ImageCountPanel(ctk.CTkFrame):
     def _run_scan(self):
         folder = self.path_selector.get()
         if not folder:
-            self.log_viewer.append("请先选择要扫描的文件夹")
+            self.log_viewer.append("请先选择数据文件夹")
             return
         
         self.btn_run.configure(state="disabled", text="扫描中...")
         self.result_path = None
         self.btn_open_folder.configure(state="disabled")
         self.log_viewer.clear()
-        self.log_viewer.append(f"开始扫描文件夹: {folder}")
+        self.log_viewer.append(f"开始扫描数据文件夹: {folder}")
         self.log_viewer.append("自动识别: jpg, jpeg, png, tif, tiff")
         
         start_time = time.time()
@@ -1388,7 +1769,7 @@ class ImageCountPanel(ctk.CTkFrame):
         
         self.result_path = output_path
         self.log_viewer.append(f"扫描完成! 用时: {elapsed:.2f}秒")
-        self.log_viewer.append(f"总共扫描文件夹数: {stats['total_folders']}")
+        self.log_viewer.append(f"总共扫描到的文件夹数: {stats['total_folders']}")
         
         imgs = stats['total_images']
         img_details = ", ".join([f"{ext.replace('.', '')} {cnt}个" for ext, cnt in imgs.items() if cnt > 0])
@@ -1420,7 +1801,7 @@ class ImageCountPanel(ctk.CTkFrame):
 class PathSelector(ctk.CTkFrame):
     """路径选择组件"""
     
-    def __init__(self, master, label: str = "选择文件夹", **kwargs):
+    def __init__(self, master, label: str = "数据文件夹", **kwargs):
         super().__init__(master, fg_color="transparent", **kwargs)
         
         self.label = ctk.CTkLabel(
@@ -1545,28 +1926,36 @@ class MainWindow(ctk.CTk):
         
         self.tool_buttons = []
         self.tool_button_map = {}
-        tools = [
-            ("文件计数与匹配统计", "image_counter"),
-            ("孤立文件清理", "orphan_cleaner"),
-            ("标签正确性检查", "label_validator"),
-            ("多边形重叠检查", "polygon_checker"),
-            ("检查抽样", "sampler"),
+        tool_groups = [
+            ("统计", [("文件计数与匹配统计", "image_counter"), ("标签出现次数统计", "label_counter")]),
+            ("清理", [("孤立文件清理", "orphan_cleaner")]),
+            ("检查", [("标签正确性检查", "label_validator"), ("多边形重叠检查", "polygon_checker")]),
+            ("抽样", [("检查抽样", "sampler")]),
         ]
-        
-        for i, (text, tool_id) in enumerate(tools):
-            btn = ctk.CTkButton(
-                self.tool_frame, text=text,
-                font=APP_FONT, height=45,
-                fg_color="transparent",
-                text_color=COLOR_TEXT_PRIMARY,
-                hover_color=COLOR_SIDEBAR_SELECTED,
-                anchor="w",
-                border_width=0,
-                command=lambda t=tool_id: self._on_tool_selected(t)
+
+        for group_title, tools in tool_groups:
+            group_label = ctk.CTkLabel(
+                self.tool_frame,
+                text=group_title,
+                font=APP_FONT_BOLD,
+                text_color=COLOR_TEXT_MUTED,
             )
-            btn.pack(fill="x", padx=10, pady=3)
-            self.tool_buttons.append(btn)
-            self.tool_button_map[tool_id] = btn
+            group_label.pack(anchor="w", padx=18, pady=(12, 4))
+
+            for text, tool_id in tools:
+                btn = ctk.CTkButton(
+                    self.tool_frame, text=text,
+                    font=APP_FONT, height=45,
+                    fg_color="transparent",
+                    text_color=COLOR_TEXT_PRIMARY,
+                    hover_color=COLOR_SIDEBAR_SELECTED,
+                    anchor="w",
+                    border_width=0,
+                    command=lambda t=tool_id: self._on_tool_selected(t)
+                )
+                btn.pack(fill="x", padx=10, pady=3)
+                self.tool_buttons.append(btn)
+                self.tool_button_map[tool_id] = btn
 
         self.about_button = ctk.CTkButton(
             self.about_frame,
@@ -1609,7 +1998,7 @@ class MainWindow(ctk.CTk):
         
         self.welcome_text = ctk.CTkLabel(
             self.home_frame,
-            text="一个面向 Labelme 标注数据处理的桌面工具集，覆盖统计、清理、校验、重叠检查与抽样五类常用任务。",
+            text="一个面向 Labelme 标注数据处理的桌面工具集，共 6 个工具，分为统计、清理、检查、抽样四个大类。",
             font=APP_FONT, text_color=COLOR_TEXT_SECONDARY
         )
         self.welcome_text.pack(anchor="w")
@@ -1632,9 +2021,10 @@ class MainWindow(ctk.CTk):
         self.intro_title.pack(anchor="w", padx=20, pady=(18, 10))
 
         intro_lines = [
-            "文件计数与匹配统计：按叶子文件夹汇总图片与 JSON 配对情况，并导出结果。",
-            "孤立文件清理与标签检查：辅助发现孤立文件、异常标签，降低人工排查成本。",
-            "多边形重叠检查与抽样：定位重叠标注问题，并快速抽取样本进行人工复核。",
+            "统计类：文件计数与匹配统计、标签出现次数统计，用于汇总配对情况和标签分布。",
+            "清理类：孤立文件清理，用于定位并删除无配对关系的图片或 JSON 文件。",
+            "检查类：标签正确性检查、多边形重叠检查，用于发现异常标签与重叠标注问题。",
+            "抽样类：检查抽样，用于从数据集中均匀抽样并复制样本做人工复核。",
         ]
 
         for line in intro_lines:
@@ -1701,6 +2091,8 @@ class MainWindow(ctk.CTk):
             self._show_panel(OrphanCleanerPanel)
         elif tool_id == "label_validator":
             self._show_panel(LabelValidatorPanel)
+        elif tool_id == "label_counter":
+            self._show_panel(LabelCounterPanel)
         elif tool_id == "polygon_checker":
             self._show_panel(PolygonOverlapPanel)
         elif tool_id == "sampler":

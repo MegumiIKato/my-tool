@@ -21,7 +21,7 @@ from shapely.strtree import STRtree
 from core.file_scanner import IMAGE_EXTENSIONS
 
 
-DEFAULT_OUTPUT_DIR_NAME = "ERROR_CHECK_RESULTS"
+DEFAULT_OUTPUT_DIR_NAME = "重叠检查结果"
 REPORT_FILE_NAME = "多边形重叠检查报告.xlsx"
 OVERLAP_LABEL_PREFIX = "[重叠] "
 
@@ -247,11 +247,11 @@ def run_polygon_overlap_check(
     }
 
     if not source_dir:
-        return None, "未选择源文件夹", empty_stats
+        return None, "未选择数据文件夹", empty_stats
 
     source_path = Path(source_dir)
     if not source_path.is_dir():
-        return None, "源文件夹不存在或不是有效目录", empty_stats
+        return None, "数据文件夹不存在或不是有效目录", empty_stats
 
     if threshold < 0:
         return None, "重叠面积阈值不能小于 0", empty_stats
@@ -265,7 +265,7 @@ def run_polygon_overlap_check(
     empty_stats["total_files"] = len(all_json_files)
 
     if not all_json_files:
-        return None, "源文件夹内未找到 JSON 文件", empty_stats
+        return None, "数据文件夹内未找到 JSON 文件", empty_stats
 
     output_path.mkdir(parents=True, exist_ok=True)
 

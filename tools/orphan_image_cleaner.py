@@ -128,7 +128,7 @@ if __name__ == "__main__":
     msg += f"孤立图片: {stats['orphan_image']} 个\n"
     msg += f"孤立JSON: {stats['orphan_json']} 个\n"
     msg += f"特殊配对: {len(stats['special_pairs'])} 组\n"
-    msg += f"扫描文件夹: {stats['folder_count']} 个"
+    msg += f"扫描到的文件夹: {stats['folder_count']} 个"
     
     if stats['special_pairs']:
         msg += "\n\n--- 特殊配对详情 ---"

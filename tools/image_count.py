@@ -88,7 +88,7 @@ if __name__ == "__main__":
         sys.exit(1)
     
     print(f"统计完成，结果已保存到: {output_path}")
-    print(f"共扫描文件夹数: {stats['total_folders']}")
+    print(f"共扫描到的文件夹数: {stats['total_folders']}")
     print(f"总共照片数: {sum(stats['total_images'].values())}")
     print(f"总共json文件数: {stats['total_json']}")
     print(f"总匹配成功数: {stats['total_matched']}")
