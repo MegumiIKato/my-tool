@@ -2040,7 +2040,7 @@ class MainWindow(ctk.CTk):
 
         self.copyright_label = ctk.CTkLabel(
             self.home_frame,
-            text="Copyright © Shuyang Gu",
+            text="Copyright © Shuyang Gu 2026 v1.0",
             font=APP_FONT_SMALL,
             text_color=COLOR_TEXT_MUTED,
         )
