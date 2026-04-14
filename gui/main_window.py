@@ -19,7 +19,7 @@ from tools.polygon_overlap_checker import run_polygon_overlap_check
 HELP_TEXTS = {
     "image_count": [
         "选择数据文件夹后点击“开始扫描”，结果会导出为 Excel。",
-        "只在最内层文件夹内配对，支持 jpg、jpeg、png、tif、tiff。",
+        "每个包含图片或 JSON 的目录都会独立配对，支持 jpg、jpeg、png、tif、tiff。",
         "结果文件保存在源目录，文件名为 文件计数统计结果.xlsx。",
     ],
     "orphan_cleaner": [
@@ -326,7 +326,7 @@ class OrphanCleanerPanel(ctk.CTkFrame):
         self.lbl_special.pack(side="left", padx=(0, 20))
 
         self.lbl_folder = ctk.CTkLabel(
-            self.row2_frame, text="扫描到的文件夹: 0 个",
+            self.row2_frame, text="扫描到的目录: 0 个",
             font=APP_FONT, text_color=COLOR_TEXT_SECONDARY
         )
         self.lbl_folder.pack(side="left")
@@ -381,14 +381,14 @@ class OrphanCleanerPanel(ctk.CTkFrame):
         self.log_viewer.append(f"有效配对: {stats['paired']} 对")
         self.log_viewer.append(f"孤立图片: {stats['orphan_image']} 个")
         self.log_viewer.append(f"孤立JSON: {stats['orphan_json']} 个")
-        self.log_viewer.append(f"扫描到的文件夹: {stats['folder_count']} 个")
+        self.log_viewer.append(f"扫描到的目录: {stats['folder_count']} 个")
 
         special_count = len(stats.get('special_pairs', []))
         self.lbl_paired.configure(text=f"有效配对: {stats['paired']} 对")
         self.lbl_orphan_image.configure(text=f"孤立图片: {stats['orphan_image']} 个")
         self.lbl_orphan_json.configure(text=f"孤立JSON: {stats['orphan_json']} 个")
         self.lbl_special.configure(text=f"特殊配对: {special_count} 组")
-        self.lbl_folder.configure(text=f"扫描到的文件夹: {stats['folder_count']} 个")
+        self.lbl_folder.configure(text=f"扫描到的目录: {stats['folder_count']} 个")
 
         if special_count > 0:
             self.log_viewer.append(f"特殊配对: {special_count} 组（需要手动处理）")
@@ -523,7 +523,7 @@ class OrphanCleanerPanel(ctk.CTkFrame):
         self.lbl_orphan_image.configure(text="孤立图片: 0 个")
         self.lbl_orphan_json.configure(text="孤立JSON: 0 个")
         self.lbl_special.configure(text="特殊配对: 0 组")
-        self.lbl_folder.configure(text="扫描到的文件夹: 0 个")
+        self.lbl_folder.configure(text="扫描到的目录: 0 个")
         self._refresh_clean_button_state()
 
 
@@ -1666,7 +1666,7 @@ class ImageCountPanel(ctk.CTkFrame):
         
         self.desc_label = ctk.CTkLabel(
             self,
-            text="统计指定目录下各最内层文件夹中的图片文件与 JSON 文件配对情况",
+            text="统计指定目录下各目录中的图片文件与 JSON 文件配对情况",
             font=APP_FONT, text_color=COLOR_TEXT_SECONDARY
         )
         self.desc_label.pack(anchor="w", pady=(0, 20), padx=20)
@@ -1769,7 +1769,7 @@ class ImageCountPanel(ctk.CTkFrame):
         
         self.result_path = output_path
         self.log_viewer.append(f"扫描完成! 用时: {elapsed:.2f}秒")
-        self.log_viewer.append(f"总共扫描到的文件夹数: {stats['total_folders']}")
+        self.log_viewer.append(f"总共扫描到的目录数: {stats['total_folders']}")
         
         imgs = stats['total_images']
         img_details = ", ".join([f"{ext.replace('.', '')} {cnt}个" for ext, cnt in imgs.items() if cnt > 0])

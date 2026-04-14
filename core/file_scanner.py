@@ -63,11 +63,28 @@ def get_leaf_folders(root_path: str) -> list[str]:
     return leaf_folders
 
 
+def get_pairable_dirs(root_path: str) -> list[str]:
+    """获取所有包含图片或 JSON 的目录。
+
+    参数:
+        root_path: 根目录路径
+
+    返回:
+        可独立作为配对空间的目录路径列表
+    """
+    pairable_dirs = []
+    for root, _dirs, files in os.walk(root_path):
+        has_candidate_files = any(is_image_file(file_name) or file_name.lower().endswith('.json') for file_name in files)
+        if has_candidate_files:
+            pairable_dirs.append(root)
+    return pairable_dirs
+
+
 def scan_leaf_dir(leaf_dir: str) -> dict:
-    """扫描单个最内层文件夹内的文件配对情况
+    """扫描单个目录内的文件配对情况。
     
     参数:
-        leaf_dir: 最内层文件夹路径
+        leaf_dir: 目录路径
     
     返回:
         {
@@ -131,7 +148,7 @@ def scan_leaf_dir(leaf_dir: str) -> dict:
 
 
 def scan_all_leaf_dirs(root_path: str) -> dict:
-    """扫描所有最内层文件夹，返回汇总统计
+    """扫描所有包含图片或 JSON 的目录，返回汇总统计。
     
     参数:
         root_path: 根目录路径
@@ -147,7 +164,7 @@ def scan_all_leaf_dirs(root_path: str) -> dict:
             'total_json': int
         }
     """
-    leaf_folders = get_leaf_folders(root_path)
+    pairable_dirs = get_pairable_dirs(root_path)
     
     total_paired = 0
     total_orphan_image = 0
@@ -156,8 +173,8 @@ def scan_all_leaf_dirs(root_path: str) -> dict:
     total_image_counts = {ext: 0 for ext in IMAGE_EXTENSIONS}
     total_json = 0
     
-    for leaf_dir in leaf_folders:
-        result = scan_leaf_dir(leaf_dir)
+    for current_dir in pairable_dirs:
+        result = scan_leaf_dir(current_dir)
         total_paired += result['paired']
         total_orphan_image += result['orphan_image']
         total_orphan_json += result['orphan_json']
@@ -172,17 +189,17 @@ def scan_all_leaf_dirs(root_path: str) -> dict:
         'orphan_image': total_orphan_image,
         'orphan_json': total_orphan_json,
         'special_pairs': all_special_pairs,
-        'folder_count': len(leaf_folders),
+        'folder_count': len(pairable_dirs),
         'image_counts': total_image_counts,
         'total_json': total_json
     }
 
 
 def find_orphans_in_leaf(leaf_dir: str) -> dict:
-    """查找最内层文件夹中的孤立文件和特殊配对
+    """查找单个目录中的孤立文件和特殊配对。
     
     参数:
-        leaf_dir: 最内层文件夹路径
+        leaf_dir: 目录路径
     
     返回:
         {
@@ -238,7 +255,7 @@ def find_orphans_in_leaf(leaf_dir: str) -> dict:
 
 
 def find_all_orphans(root_path: str) -> dict:
-    """扫描所有最内层文件夹中的孤立文件
+    """扫描所有包含图片或 JSON 的目录中的孤立文件。
     
     参数:
         root_path: 根目录路径
@@ -261,8 +278,8 @@ def find_all_orphans(root_path: str) -> dict:
     all_orphan_image_paths = []
     all_orphan_json_paths = []
     
-    for leaf_dir in get_leaf_folders(root_path):
-        orphan_result = find_orphans_in_leaf(leaf_dir)
+    for current_dir in get_pairable_dirs(root_path):
+        orphan_result = find_orphans_in_leaf(current_dir)
         all_orphan_image_paths.extend(orphan_result['orphan_image_paths'])
         all_orphan_json_paths.extend(orphan_result['orphan_json_paths'])
     

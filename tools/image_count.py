@@ -1,7 +1,7 @@
 import os
 import sys
 from openpyxl import Workbook
-from core.file_scanner import get_leaf_folders, scan_leaf_dir, IMAGE_EXTENSIONS
+from core.file_scanner import get_pairable_dirs, scan_leaf_dir, IMAGE_EXTENSIONS
 
 
 def select_folder():
@@ -29,7 +29,7 @@ def run_count(root_folder: str):
     if not os.path.isdir(root_folder):
         return None, "文件夹路径无效"
     
-    leaf_folders = get_leaf_folders(root_folder)
+    pairable_dirs = get_pairable_dirs(root_folder)
     
     total_folders = 0
     total_images_by_ext = {ext: 0 for ext in IMAGE_EXTENSIONS}
@@ -41,7 +41,7 @@ def run_count(root_folder: str):
     ws.title = "统计结果"
     ws.append(["序号", "文件夹路径", "jpg文件数", "jpeg文件数", "png文件数", "tif文件数", "tiff文件数", "json文件数", "文件配对成功数"])
     
-    for idx, fld in enumerate(leaf_folders, 1):
+    for idx, fld in enumerate(pairable_dirs, 1):
         result = scan_leaf_dir(fld)
         
         total_imgs = sum(result['image_counts'].values())

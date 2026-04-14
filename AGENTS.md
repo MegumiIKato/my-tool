@@ -36,7 +36,7 @@ IMAGE_EXTENSIONS = ('.jpg', '.jpeg', '.png', '.tif', '.tiff')
 ##### 1. 文件计数与匹配统计
 
 - 选择数据文件夹路径
-- 最内层文件夹作为独立统计单元
+- 每个包含图片或 JSON 的目录作为独立统计单元
 - 自动识别图片格式：jpg, jpeg, png, tif, tiff
 - 统计各后缀文件数量及总计
 - 导出 Excel 结果文件（`文件计数统计结果.xlsx`）
@@ -60,7 +60,7 @@ IMAGE_EXTENSIONS = ('.jpg', '.jpeg', '.png', '.tif', '.tiff')
 ##### 3. 孤立文件清理
 
 - 支持两种清理模式：删除孤立图片 / 删除孤立JSON
-- 最内层文件夹内独立配对判断（跨文件夹不配对）
+- 每个包含图片或 JSON 的目录内独立配对判断（跨文件夹不配对）
 - **特殊配对检测**：同名多格式图片+JSON（如 `1.jpg` + `1.png` + `1.json`）
 - 特殊配对不删除，在报告中列出详情供用户手动处理
 - 清理前弹窗确认，弹窗需绑定主窗口、居中显示并保持统一样式
@@ -379,10 +379,11 @@ IMAGE_EXTENSIONS = ('.jpg', '.jpeg', '.png', '.tif', '.tiff')
 |------|------|--------|
 | `is_image_file(filename)` | 判断是否为图片文件 | `bool` |
 | `get_leaf_folders(root_path)` | 获取所有最内层文件夹 | `list[str]` |
-| `scan_leaf_dir(leaf_dir)` | 扫描单个最内层文件夹配对情况 | `dict` |
-| `scan_all_leaf_dirs(root_path)` | 扫描所有最内层文件夹汇总统计 | `dict` |
-| `find_orphans_in_leaf(leaf_dir)` | 查找最内层文件夹中的孤立文件 | `dict` |
-| `find_all_orphans(root_path)` | 扫描所有最内层文件夹的孤立文件 | `dict` |
+| `get_pairable_dirs(root_path)` | 获取所有包含图片或 JSON 的目录 | `list[str]` |
+| `scan_leaf_dir(leaf_dir)` | 扫描单个目录配对情况 | `dict` |
+| `scan_all_leaf_dirs(root_path)` | 扫描所有包含图片或 JSON 的目录汇总统计 | `dict` |
+| `find_orphans_in_leaf(leaf_dir)` | 查找单个目录中的孤立文件 | `dict` |
+| `find_all_orphans(root_path)` | 扫描所有包含图片或 JSON 的目录中的孤立文件 | `dict` |
 | `scan_json_files(root_path, exclude_dirs=None)` | 递归扫描 JSON 并支持排除目录 | `Generator[Path, None, None]` |
 | `scan_image_json_pairs(root_path, exclude_dirs=None)` | 递归扫描图片/JSON 配对并支持排除目录 | `dict[str, list[tuple[str, str]]]` |
 
@@ -429,7 +430,7 @@ IMAGE_EXTENSIONS = ('.jpg', '.jpeg', '.png', '.tif', '.tiff')
 
 ### 配对逻辑
 
-1. 最内层文件夹作为独立配对空间
+1. 每个包含图片或 JSON 的目录作为独立配对空间
 2. 跨文件夹同名文件不参与配对
 3. 配对基于文件名（不含扩展名）判断
 
