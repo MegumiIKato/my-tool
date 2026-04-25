@@ -200,6 +200,7 @@ python -c "from tools.image_json_sampler import run_sampler; from tools.label_co
 - 标签出现次数统计：可额外验证手动输入标签的分隔解析、去重顺序，以及文件优先逻辑
 - 多边形重叠检查：当前数据集中可检出 `2` 个问题文件
 - 抽样：可验证复制结果与 shapes 统计
+- 文件计数与孤立文件清理：如需验证“父目录同时包含文件和子目录”的场景，建议复制 `TestData/` 中的样本后额外构造验证目录
 - 孤立文件清理：建议复制 `TestData/` 后额外构造孤立图片、孤立 JSON、特殊配对进行验证，避免直接改动原始测试集
 
 ---
@@ -387,6 +388,11 @@ IMAGE_EXTENSIONS = ('.jpg', '.jpeg', '.png', '.tif', '.tiff')
 | `scan_json_files(root_path, exclude_dirs=None)` | 递归扫描 JSON 并支持排除目录 | `Generator[Path, None, None]` |
 | `scan_image_json_pairs(root_path, exclude_dirs=None)` | 递归扫描图片/JSON 配对并支持排除目录 | `dict[str, list[tuple[str, str]]]` |
 
+补充说明：
+
+- `get_leaf_folders(root_path)` 仅返回无子目录的最内层目录，保留给明确需要叶子目录语义的场景。
+- `scan_all_leaf_dirs(root_path)` 与 `find_all_orphans(root_path)` 为保持兼容保留历史命名，但当前实际会扫描所有包含图片或 JSON 的目录。
+
 ### 返回数据结构
 
 #### `scan_leaf_dir` / `scan_all_leaf_dirs`
@@ -433,6 +439,7 @@ IMAGE_EXTENSIONS = ('.jpg', '.jpeg', '.png', '.tif', '.tiff')
 1. 每个包含图片或 JSON 的目录作为独立配对空间
 2. 跨文件夹同名文件不参与配对
 3. 配对基于文件名（不含扩展名）判断
+4. 若父目录同时包含文件和子目录，父目录自身文件仍按当前目录独立配对统计
 
 ---
 
@@ -528,10 +535,13 @@ class XxxPanel(ctk.CTkFrame):
 
 ```python
 # 推荐：从 core.file_scanner 导入公共函数
-from core.file_scanner import scan_all_leaf_dirs, find_all_orphans, IMAGE_EXTENSIONS
+from core.file_scanner import get_pairable_dirs, scan_all_leaf_dirs, find_all_orphans, IMAGE_EXTENSIONS
 
 # 扫描统计
 stats = scan_all_leaf_dirs(target_dir)
+
+# 如需只获取参与配对的目录列表
+pairable_dirs = get_pairable_dirs(target_dir)
 
 # 孤立文件清理
 orphans = find_all_orphans(target_dir)
