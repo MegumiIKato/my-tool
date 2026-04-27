@@ -70,7 +70,6 @@ def create_modal_window(owner, title: str, width: int, height: int) -> ctk.CTkTo
     window.resizable(False, False)
     window.configure(fg_color=COLOR_BG_MAIN)
     window.transient(parent_window)
-    window.grab_set()
     window.lift()
 
     parent_window.update_idletasks()
@@ -82,7 +81,11 @@ def create_modal_window(owner, title: str, width: int, height: int) -> ctk.CTkTo
     pos_x = parent_x + max((parent_width - width) // 2, 0)
     pos_y = parent_y + max((parent_height - height) // 2, 0)
     window.geometry(f"{width}x{height}+{pos_x}+{pos_y}")
-    window.focus()
+    window.update_idletasks()
+    # 先等待窗口完成映射，再设置焦点和 grab，避免弹窗可见但按钮无法点击。
+    window.wait_visibility()
+    window.focus_force()
+    window.grab_set()
     return window
 
 
@@ -430,7 +433,7 @@ class OrphanCleanerPanel(ctk.CTkFrame):
         mode_text = "孤立图片" if mode == 'image' else "孤立JSON"
         confirm_text = f"确定要删除 {orphan_count} 个{mode_text}吗？\n\n此操作不可恢复！"
 
-        confirm_window = create_modal_window(self, "确认清理", 400, 180)
+        confirm_window = create_modal_window(self, "确认清理", 400, 260)
         create_modal_header(confirm_window, "确认清理", "请再次确认本次删除操作，删除后无法恢复。")
 
         ctk.CTkLabel(
