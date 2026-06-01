@@ -1,6 +1,4 @@
 shapely
-tqdm
 pyinstaller
-pandas
 openpyxl
 customtkinter
