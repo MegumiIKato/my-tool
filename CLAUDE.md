@@ -1,4 +1,4 @@
-# Agent 指南 (AGENTS.md)
+# Agent 指南 (CLAUDE.md)
 
 本文件为在此代码库中工作的 AI 代理提供开发规范和操作指南。
 
